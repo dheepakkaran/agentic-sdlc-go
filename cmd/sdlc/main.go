@@ -119,8 +119,13 @@ func publish(r *harness.Result, is harness.Issue, branch, dir, runID string) {
 	sh(dir, "git", "add", "-A")
 	msg := fmt.Sprintf("%s\n\nCloses #%d\n\nAI-Assisted: sdlc-harness (%s)", r.Docs.PRTitle, is.Number, strings.Join(r.DevModels, ", "))
 	sh(dir, "git", "commit", "-q", "-m", msg)
-	sh(dir, "git", "push", "-q", "-u", "origin", branch)
+	sh(dir, "git", "push", "-q", "--force-with-lease", "-u", "origin", branch) // agent branches only: a re-run replaces the branch
 	body := r.Docs.PRBody + fmt.Sprintf("\n\n---\nRun `%s` · models %s · %d developer attempt(s) · cost $%.4f · ledger in `results/ledger.jsonl`", runID, strings.Join(r.DevModels, " → "), len(r.Attempts), r.CostUSD)
+	if url, err := exec.Command("gh", "pr", "view", branch, "--json", "url", "-q", ".url").Output(); err == nil && len(url) > 0 { // #nosec G204 -- branch built here
+		_ = exec.Command("gh", "pr", "edit", branch, "--body", body).Run() // #nosec G204 -- branch built here
+		fmt.Println("  PR updated:", strings.TrimSpace(string(url)))
+		return
+	}
 	out := sh(dir, "gh", "pr", "create", "--title", r.Docs.PRTitle, "--body", body, "--label", "ai-authored", "--base", "main", "--head", branch)
 	fmt.Println("  PR:", strings.TrimSpace(out))
 }

@@ -33,6 +33,10 @@ Every item is from a real run; numbers come from `results/ledger.jsonl` and `res
 **Seen:** the first lint + security scan of the harness: golangci-lint 16 issues, gosec 35.
 **Changed:** errors handled everywhere, tighter file modes, agent file reads and writes through `os.Root` (cannot leave the worktree), CI git ref validated by a regex. 9 remaining gosec findings are justified with an inline `#nosec` reason (fixed tools run with arguments the harness builds, no shell).
 
+## 9. CI lint caught what the harness gates missed
+**Seen:** PR #5 (issue #2): gofmt, vet and tests passed inside the harness and QA approved, but CI's golangci-lint failed (`buf.ReadFrom` error not checked in a test), so release readiness blocked the PR. The gates worked; the harness was checking less than CI.
+**Changed (v3.1):** the same golangci-lint runs in the harness's local gates, so the developer fixes lint inside its retry loop. A re-run replaces the agent branch and updates the open PR.
+
 ## 8. Is the cheap analyst worth it? (analyst eval)
 **Seen:** Haiku returned an empty answer on 2 of the first 4 pipeline runs. Instead of guessing, `cmd/analyst-eval` ran each config on all 3 issues and scored it with the same check the pipeline uses (`results/analyst_eval.json`):
 

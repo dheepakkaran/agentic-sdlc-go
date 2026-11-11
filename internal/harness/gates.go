@@ -28,6 +28,12 @@ func LocalGates(dir string) []Gate {
 	gs = append(gs, Gate{"go vet", err == nil, tail(out, 30)})
 	out, err = run(dir, "go", "test", "-race", "-count=1", "./...")
 	gs = append(gs, Gate{"go test -race", err == nil, tail(out, 40)})
+	// Same linter as CI, run here so the developer sees lint failures in its
+	// own retry loop instead of after the PR (FAILURES.md #9).
+	if _, lerr := exec.LookPath("golangci-lint"); lerr == nil {
+		out, err = run(dir, "golangci-lint", "run", "./internal/inventory/...")
+		gs = append(gs, Gate{"golangci-lint", err == nil, tail(out, 30)})
+	}
 	return gs
 }
 
