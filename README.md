@@ -1,10 +1,10 @@
-# go-ai-sdlc-pipeline
+# agentic-sdlc-go
 
 An AI-assisted software development pipeline for a small Go service. A GitHub issue goes through role agents (analyst → architect → developer ⇄ tests → QA → docs) and comes out as a pull request that must pass the same gates as human code: tests with the race detector, lint, security scanning, a container scan, a deploy to Kubernetes, and a release readiness check.
 
 The service is a network device inventory REST API (routers, switches, OLTs). It is deliberately small so every agent change is easy to review.
 
-**Project page:** [dheepakkaran.github.io/go-ai-sdlc-pipeline](https://dheepakkaran.github.io/go-ai-sdlc-pipeline/)
+**Project page:** [dheepakkaran.github.io/agentic-sdlc-go](https://dheepakkaran.github.io/agentic-sdlc-go/)
 
 ## Results (3 real issues, November 2026)
 | | |

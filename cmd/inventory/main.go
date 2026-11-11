@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory"
+	"github.com/dheepakkaran/agentic-sdlc-go/internal/inventory"
 )
 
 func main() {

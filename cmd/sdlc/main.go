@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness"
+	"github.com/dheepakkaran/agentic-sdlc-go/internal/harness"
 )
 
 var mapDirs = []string{"internal/inventory", "cmd/inventory"}

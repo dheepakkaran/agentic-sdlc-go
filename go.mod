@@ -1,4 +1,4 @@
-module github.com/dheepakkaran/go-ai-sdlc-pipeline
+module github.com/dheepakkaran/agentic-sdlc-go
 
 go 1.27.4
 

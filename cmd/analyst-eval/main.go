@@ -12,8 +12,8 @@ import (
 	"os/exec"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness"
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/prompts"
+	"github.com/dheepakkaran/agentic-sdlc-go/internal/harness"
+	"github.com/dheepakkaran/agentic-sdlc-go/prompts"
 )
 
 type cfg struct {

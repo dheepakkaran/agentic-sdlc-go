@@ -111,7 +111,7 @@ footer{padding:44px 0 64px;font-size:13.5px;color:var(--muted)}
 <nav><div class="wrap">
   <a class="brand" href="#">AI-SDLC Pipeline</a>
   <a href="#problem">Problem</a><a href="#how">How it works</a><a href="#tokens">Tokens</a><a href="#results">Results</a><a href="#broke">What broke</a><a href="#dashboard">Dashboard</a><a href="#run">Run</a>
-  <a href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline">GitHub</a>
+  <a href="https://github.com/dheepakkaran/agentic-sdlc-go">GitHub</a>
 </div></nav>
 
 <header>
@@ -119,7 +119,7 @@ footer{padding:44px 0 64px;font-size:13.5px;color:var(--muted)}
     <div class="kicker">Go · Claude API · November 2026</div>
     <h1>A GitHub issue goes in. A tested, scanned, deployed pull request comes out. A person still merges it.</h1>
     <p class="lede">Role agents (analyst, architect, developer, QA, docs) take an issue for a small Go service through requirements, a design decision, code with tests, review and release notes. The pull request then has to pass the same CI gates as human code. Every model call is logged with its tokens and cost.</p>
-    <div class="meta"><span>Go · Claude Opus, Sonnet, Haiku · GitHub Actions · Docker · Kubernetes</span><a href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline">Source code</a><a href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline/blob/main/FAILURES.md">What broke</a></div>
+    <div class="meta"><span>Go · Claude Opus, Sonnet, Haiku · GitHub Actions · Docker · Kubernetes</span><a href="https://github.com/dheepakkaran/agentic-sdlc-go">Source code</a><a href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">What broke</a></div>
   </div>
 </header>
 
@@ -239,7 +239,7 @@ footer{padding:44px 0 64px;font-size:13.5px;color:var(--muted)}
       <div class="item fade"><h3>I broke main</h3><p>I committed an unformatted file the developer may not touch, and three attempts failed for $0.19. The harness now runs the gates on the base before any model call.</p></div>
       <div class="item fade"><h3>A revision destroyed a green version</h3><p>QA asked for work the issue never mentioned; the revision broke the tests and nothing rolled back. Now the last green version is kept, and QA judges against the issue and the architect's plan.</p></div>
     </div>
-    <p class="fade" style="margin-top:36px"><a href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline/blob/main/FAILURES.md">All twelve, with numbers →</a></p>
+    <p class="fade" style="margin-top:36px"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">All twelve, with numbers →</a></p>
   </div>
 </section>
 
@@ -268,7 +268,7 @@ go build -o sdlc ./cmd/sdlc
 ./sdlc redoc -issue 1           # redo only the docs step on an open PR
 go run ./cmd/analyst-eval       # which model should write requirements
 go run ./cmd/metrics            # ledger + GitHub → results/metrics.json</pre>
-    <div class="btns fade"><a class="btn solid" href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline">Source on GitHub</a><a class="btn" href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline/pulls?q=is%3Apr+label%3Aai-authored">Agent pull requests</a></div>
+    <div class="btns fade"><a class="btn solid" href="https://github.com/dheepakkaran/agentic-sdlc-go">Source on GitHub</a><a class="btn" href="https://github.com/dheepakkaran/agentic-sdlc-go/pulls?q=is%3Apr+label%3Aai-authored">Agent pull requests</a></div>
     <p class="muted fade" style="margin-top:36px;font-size:14.5px">Limits: three small issues on a 6 KB service, so the routing saving is one comparison, not a benchmark. The single-call baseline was cheaper on this repo; the pipeline pays for requirements, a scope decision, review, docs and guardrails. Total spend for every run on this page, failures and experiments included: $2.13.</p>
   </div>
 </section>
@@ -301,7 +301,7 @@ const M = window.METRICS || {};
     const ok = checks.filter(c => c.conclusion === "SUCCESS").length;
     const h = p.state === "MERGED" ? ((new Date(p.mergedAt) - new Date(p.createdAt)) / 36e5) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="n"><a href="https://github.com/dheepakkaran/go-ai-sdlc-pipeline/pull/${p.number}">#${p.number}</a></td><td></td><td>${ai ? '<span class="tag">ai-authored</span>' : ""}</td><td class="n">${ok} / ${checks.length}</td><td class="n">${h === null ? p.state.toLowerCase() : (h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h")}</td><td class="n">+${p.additions} −${p.deletions}</td>`;
+    tr.innerHTML = `<td class="n"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/pull/${p.number}">#${p.number}</a></td><td></td><td>${ai ? '<span class="tag">ai-authored</span>' : ""}</td><td class="n">${ok} / ${checks.length}</td><td class="n">${h === null ? p.state.toLowerCase() : (h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h")}</td><td class="n">+${p.additions} −${p.deletions}</td>`;
     tr.children[1].textContent = p.title; tb.appendChild(tr);
   });
   const all = M.all_calls_total || {}, fin = M.harness_total || {}, n = (M.issues || []).length || 1;

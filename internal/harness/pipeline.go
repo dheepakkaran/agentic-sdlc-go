@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/prompts"
+	"github.com/dheepakkaran/agentic-sdlc-go/prompts"
 )
 
 // Issue is the input: a GitHub issue.

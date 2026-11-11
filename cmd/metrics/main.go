@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness"
+	"github.com/dheepakkaran/agentic-sdlc-go/internal/harness"
 )
 
 type agg struct {
