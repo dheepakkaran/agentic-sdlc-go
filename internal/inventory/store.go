@@ -5,6 +5,8 @@ package inventory
 
 import (
 	"errors"
+	"fmt"
+	"net/netip"
 	"sort"
 	"sync"
 	"time"
@@ -44,6 +46,12 @@ func validate(d Device) error {
 	}
 	if d.Status != "" && d.Status != "up" && d.Status != "down" {
 		return ErrInvalid
+	}
+	if d.MgmtIP != "" {
+		a, err := netip.ParseAddr(d.MgmtIP)
+		if err != nil || a.Zone() != "" {
+			return fmt.Errorf("%w: mgmt_ip must be a valid IPv4 or IPv6 address", ErrInvalid)
+		}
 	}
 	return nil
 }
