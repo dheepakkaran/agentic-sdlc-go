@@ -21,7 +21,8 @@ func Handler(s *Store) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /devices", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, s.List())
+		q := r.URL.Query()
+		writeJSON(w, http.StatusOK, s.ListFiltered(q.Get("site"), q.Get("role")))
 	})
 	mux.HandleFunc("POST /devices", func(w http.ResponseWriter, r *http.Request) {
 		var d Device

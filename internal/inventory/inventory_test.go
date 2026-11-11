@@ -123,6 +123,92 @@ func TestHTTPErrors(t *testing.T) {
 	}
 }
 
+func seedFilter(t *testing.T, s *Store) {
+	t.Helper()
+	for _, d := range []Device{
+		{ID: "d4", Hostname: "h", Role: "router", Site: "sea"},
+		{ID: "d2", Hostname: "h", Role: "switch", Site: "sjc"},
+		{ID: "d3", Hostname: "h", Role: "router", Site: "sjc"},
+		{ID: "d1", Hostname: "h", Role: "router", Site: "sjc"},
+		{ID: "d5", Hostname: "h", Role: "switch", Site: "sea"},
+	} {
+		if _, err := s.Create(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+var filterCases = []struct {
+	name, query string
+	site, role  string
+	want        []string
+}{
+	{"none", "", "", "", []string{"d1", "d2", "d3", "d4", "d5"}},
+	{"site", "?site=sjc", "sjc", "", []string{"d1", "d2", "d3"}},
+	{"role", "?role=router", "", "router", []string{"d1", "d3", "d4"}},
+	{"both", "?site=sjc&role=router", "sjc", "router", []string{"d1", "d3"}},
+	{"no match", "?site=nonexistent", "nonexistent", "", []string{}},
+	{"case sensitive", "?site=SJC", "SJC", "", []string{}},
+	{"empty site", "?site=", "", "", []string{"d1", "d2", "d3", "d4", "d5"}},
+	{"empty site role", "?site=&role=router", "", "router", []string{"d1", "d3", "d4"}},
+	{"unknown param", "?foo=bar", "", "", []string{"d1", "d2", "d3", "d4", "d5"}},
+}
+
+func idsOf(l []Device) []string {
+	ids := make([]string, 0, len(l))
+	for _, d := range l {
+		ids = append(ids, d.ID)
+	}
+	return ids
+}
+
+func TestStoreListFiltered(t *testing.T) {
+	for _, tc := range filterCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore()
+			seedFilter(t, s)
+			got := s.ListFiltered(tc.site, tc.role)
+			if got == nil {
+				t.Fatal("nil slice")
+			}
+			if g, w := strings.Join(idsOf(got), ","), strings.Join(tc.want, ","); g != w {
+				t.Fatalf("got %s want %s", g, w)
+			}
+		})
+	}
+}
+
+func TestHTTPListFilter(t *testing.T) {
+	for _, tc := range filterCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore()
+			seedFilter(t, s)
+			srv := httptest.NewServer(Handler(s))
+			defer srv.Close()
+			res, err := http.Get(srv.URL + "/devices" + tc.query)
+			if err != nil || res.StatusCode != http.StatusOK {
+				t.Fatalf("get: %v %v", err, res)
+			}
+			defer func() { _ = res.Body.Close() }()
+			var list []Device
+			if err := json.NewDecoder(res.Body).Decode(&list); err != nil {
+				t.Fatal(err)
+			}
+			if list == nil {
+				t.Fatal("want [] not null")
+			}
+			if g, w := strings.Join(idsOf(list), ","), strings.Join(tc.want, ","); g != w {
+				t.Fatalf("got %s want %s", g, w)
+			}
+			for _, d := range list {
+				if (tc.site != "" && d.Site != tc.site) || (tc.role != "" && d.Role != tc.role) {
+					t.Fatalf("mismatch: %+v", d)
+				}
+			}
+		})
+	}
+}
+
 func TestStoreSetStatus(t *testing.T) {
 	cases := []struct {
 		name, id, initial, set string
