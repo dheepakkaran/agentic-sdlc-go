@@ -3,6 +3,7 @@ package inventory
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -13,6 +14,7 @@ import (
 //	POST   /devices
 //	GET    /devices/{id}
 //	DELETE /devices/{id}
+//	PUT    /devices/{id}/status
 func Handler(s *Store) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +50,23 @@ func Handler(s *Store) http.Handler {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("PUT /devices/{id}/status", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Status string `json:"status"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeErr(w, http.StatusBadRequest, "bad json")
+			return
+		}
+		out, err := s.SetStatus(r.PathValue("id"), body.Status)
+		if err != nil {
+			writeErr(w, status(err), err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
 	})
 	return mux
 }
