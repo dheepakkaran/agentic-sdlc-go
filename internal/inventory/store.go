@@ -96,3 +96,20 @@ func (s *Store) Delete(id string) error {
 	delete(s.devices, id)
 	return nil
 }
+
+// SetStatus sets only the status and updated_at of an existing device.
+func (s *Store) SetStatus(id, status string) (Device, error) {
+	if status != "up" && status != "down" {
+		return Device{}, ErrInvalid
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.devices[id]
+	if !ok {
+		return Device{}, ErrNotFound
+	}
+	d.Status = status
+	d.UpdatedAt = s.now().UTC()
+	s.devices[id] = d
+	return d, nil
+}
