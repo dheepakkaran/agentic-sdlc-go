@@ -1,0 +1,6 @@
+.env
+.work/
+/sdlc
+/inventory
+*.out
+env.sh

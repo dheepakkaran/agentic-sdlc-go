@@ -1,0 +1,89 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - name: go test (race + coverage)
+        run: |
+          go test -race -count=1 ./...
+          go test -count=1 -coverprofile=cover.out ./internal/inventory/...
+      - name: coverage summary
+        run: go tool cover -func=cover.out | tail -1 | tee coverage.txt
+      - uses: actions/upload-artifact@v4
+        with: {name: coverage, path: coverage.txt}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - name: govulncheck (known vulnerabilities in reachable code + deps)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: gosec (static security scan)
+        run: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet ./...
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build
+        run: docker build -t inventory:ci .
+      - name: trivy image scan (HIGH/CRITICAL fail the build)
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1
+          image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed inventory:ci
+      - name: kind cluster
+        run: |
+          curl -sLo kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64 && chmod +x kind
+          ./kind create cluster --wait 90s
+          ./kind load docker-image inventory:ci
+      - name: deploy + smoke test
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl rollout status deploy/inventory --timeout=90s
+          kubectl port-forward svc/inventory 8080:80 & sleep 3
+          curl -fsS localhost:8080/health
+          curl -fsS -XPOST localhost:8080/devices -d '{"id":"r1","hostname":"core-r1"}'
+          curl -fsS localhost:8080/devices/r1
+
+  release-readiness:
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, image]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - uses: actions/download-artifact@v4
+        with: {name: coverage}
+        continue-on-error: true
+      - name: release readiness gate
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          BASE: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: go run ./cmd/release-ready -min-coverage 80 >> "$GITHUB_STEP_SUMMARY"

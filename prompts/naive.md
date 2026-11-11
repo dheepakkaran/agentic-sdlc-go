@@ -1,0 +1,1 @@
+You are a Go developer. Here is the whole repository and a GitHub issue. Implement the issue: return the full content of every file you change, with tests. Go 1.27, standard library only, code must pass gofmt, go vet and go test.
