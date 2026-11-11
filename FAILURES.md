@@ -37,6 +37,14 @@ Every item is from a real run; numbers come from `results/ledger.jsonl` and `res
 **Seen:** PR #5 (issue #2): gofmt, vet and tests passed inside the harness and QA approved, but CI's golangci-lint failed (`buf.ReadFrom` error not checked in a test), so release readiness blocked the PR. The gates worked; the harness was checking less than CI.
 **Changed (v3.1):** the same golangci-lint runs in the harness's local gates, so the developer fixes lint inside its retry loop. A re-run replaces the agent branch and updates the open PR.
 
+## 12. A QA revision broke a green version, and nothing rolled it back
+**Seen:** issue #3 (v3.2, $0.25, not published). Attempt 1 passed every gate. QA (Opus) asked for changes, partly for **work the issue never asked for** (an endpoint to update mgmt_ip, from an over-reaching analyst criterion). The revision corrupted the test file, and the escalated Opus attempt edited on top of the broken file and could not recover. The working version was lost.
+**Changed (v3.3):**
+- **green checkpoint:** every passing attempt is snapshotted; a later failing attempt is rolled back before the next try, and the developer is told so; if the revision never lands, the green version is kept and the findings go to a human;
+- **scope:** QA now gets the issue text and the architect's approved plan and judges against them; criteria beyond the issue cannot block a merge;
+- **narrow revisions:** the developer changes only what the QA findings name.
+**Lesson:** validators that check "not empty" do not catch "too much". Scope has to have one owner (here the architect), and every later role is judged against it.
+
 ## 11. The cheap docs agent returned empty fields
 **Seen:** PR #5 (issue #2, v3.1): Haiku returned `{"pr_title": "", "pr_body": "", "changelog_entry": ""}` (39 output tokens). The commit had no title and no CHANGELOG line, and the **release readiness gate blocked the PR** ("service change must update the CHANGELOG"). Same failure shape as the analyst in #3.
 **Changed (v3.2):** the docs role gets the same cascade: a deterministic check (title, body that links the issue, changelog line) and one retry one model up. `sdlc redoc` redoes only the docs step on the open branch (cents, not a full re-run).

@@ -132,3 +132,18 @@ func TestDocsValid(t *testing.T) {
 		t.Error("docs check must pass good output and require the issue link")
 	}
 }
+
+func TestSnapshotRestore(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeInRoot(dir, File{Path: "a.go", Content: "package a // green"}); err != nil {
+		t.Fatal(err)
+	}
+	green := snapshot(dir, []string{"a.go"})
+	if err := writeInRoot(dir, File{Path: "a.go", Content: "package a func broken("}); err != nil {
+		t.Fatal(err)
+	}
+	restore(dir, green)
+	if got := ReadFiles(dir, []string{"a.go"}); !strings.Contains(got, "// green") {
+		t.Errorf("rollback failed: %s", got)
+	}
+}

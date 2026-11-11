@@ -32,6 +32,7 @@ type Result struct {
 	Approved     bool         `json:"qa_approved"`
 	Stopped      string       `json:"stopped,omitempty"`
 	Escalations  []string     `json:"escalations,omitempty"`
+	Rollbacks    int          `json:"rollbacks,omitempty"`
 	CostUSD      float64      `json:"cost_usd"`
 	Calls        []Call       `json:"calls"`
 }
@@ -102,6 +103,7 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 	files := ReadFiles(p.Dir, uniq(append(append([]string{}, r.Plan.FilesToRead...), r.Plan.FilesToWrite...)))
 	turns := []Msg{{Text: reqText + "\n\nPlan:\n" + js(r.Plan) + "\n\nFiles:\n" + files}}
 	lastGatesFailed := false
+	var green map[string]string // last version that passed every gate
 	for attempt := 1; attempt <= p.MaxAttempts; attempt++ {
 		model := Routes[Developer].Model
 		if attempt == p.MaxAttempts && lastGatesFailed {
@@ -125,13 +127,24 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 		r.Attempts = append(r.Attempts, gs)
 		p.Log("gates     %s", gateLine(gs))
 		lastGatesFailed = !allOK(gs)
+		if !allOK(gs) && green != nil {
+			// Roll back: a revision broke a version that was green. The next
+			// attempt starts from the working files, not from the wreck
+			// (FAILURES.md #12).
+			restore(p.Dir, green)
+			p.Log("rollback  restored the last green version")
+			r.Rollbacks++
+		}
 		if allOK(gs) {
+			green = snapshot(p.Dir, r.Changed)
 			r.Passed = true
 			// 4. QA (strong model, decision) sees only the diff.
+			_, _ = run(p.Dir, "git", "add", "-N", ".")
 			diff, _ := run(p.Dir, "git", "diff", "--no-color")
 			var rv Review
 			p.Log("qa        %s  → merge decision", Routes[QA].Model)
-			if err := p.LLM.Ask(ctx, QA, "", shared, prompts.QA, []Msg{{Text: reqText + "\n\nGate results: all passed (gofmt, vet, test -race).\n\nDiff:\n" + diff}}, reviewSchema, len(r.Review)+1, &rv); err != nil {
+			qaMsg := issueText + "\n\nApproved plan (scope):\n" + js(r.Plan.Steps) + "\n\n" + reqText + "\n\nGate results: all passed (gofmt, vet, test -race, golangci-lint).\n\nDiff:\n" + diff
+			if err := p.LLM.Ask(ctx, QA, "", shared, prompts.QA, []Msg{{Text: qaMsg}}, reviewSchema, len(r.Review)+1, &rv); err != nil {
 				return r, err
 			}
 			r.Review = append(r.Review, rv)
@@ -148,7 +161,18 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 			turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: "QA requested changes (edits apply to the files as they are now):\n" + js(code)})
 			continue
 		}
-		turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: "Your change failed the gates. Fix it.\n" + failures(gs)})
+		fb := "Your change failed the gates. Fix it.\n" + failures(gs)
+		if green != nil {
+			fb = "Your last edits broke a version that passed every gate, so they were reverted: the files are back to the last passing version. Make only the requested change, with smaller edits.\n" + failures(gs) + "\nCurrent files:\n" + ReadFiles(p.Dir, r.Changed)
+		}
+		turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: fb})
+	}
+	if !r.Passed && green != nil {
+		// The green version stays; QA's open findings go to a human.
+		restore(p.Dir, green)
+		r.Passed = true
+		r.Stopped = "QA revision did not land cleanly: last green version kept, findings need a human"
+		return r, nil
 	}
 	if !r.Passed {
 		r.Stopped = "gates still failing after retries"
@@ -233,6 +257,27 @@ func typeLines(repoMap string) string {
 		}
 	}
 	return b.String()
+}
+
+func snapshot(dir string, paths []string) map[string]string {
+	m := map[string]string{}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return m
+	}
+	defer func() { _ = root.Close() }()
+	for _, p := range paths {
+		if b, err := root.ReadFile(p); err == nil {
+			m[p] = string(b)
+		}
+	}
+	return m
+}
+
+func restore(dir string, snap map[string]string) {
+	for p, c := range snap {
+		_ = writeInRoot(dir, File{Path: p, Content: c})
+	}
 }
 
 // codeFindings keeps the QA findings the developer can act on: those on a
