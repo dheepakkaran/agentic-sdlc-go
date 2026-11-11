@@ -3,277 +3,427 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI-SDLC Pipeline for a Go Service</title>
-<meta name="description" content="Role agents turn GitHub issues into pull requests that pass tests, lint, security scans, a Kubernetes deploy and a release gate. Model routing, context packing and a cost ledger; a person still merges.">
+<title>agentic-sdlc-go</title>
+<meta name="description" content="Role agents on the Claude API turn small GitHub issues into reviewed, tested, scanned and deployed pull requests for a Go service. Model routing, context packing, a cost ledger, and a person who merges.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#ffffff; --ink:#0a0a0a; --ink2:#3d3d3d; --muted:#737373; --line:#e5e5e5; --soft:#f5f5f5;
-  --bar0:#d4d4d4; --bar1:#0a0a0a;
+  --bg:#faf9f5; --surface:#ffffff; --surface2:#f3f1ea; --ink:#1f1e1d; --ink2:#3d3b37; --muted:#6b6862; --line:#e4dfd3;
+  --accent:#c2603f; --accent-ink:#ffffff; --accent-soft:#f6e4da;
+  --green:#1a7f37; --green-soft:#dafbe1; --purple:#8250df; --red:#cf222e;
+  --code:#f6f4ee; --term:#1f1e1d; --term-ink:#ece9e1; --term-muted:#a8a39a;
+  --opus:#c2603f; --sonnet:#b7791f; --haiku:#4d7c5b; --bot:#ffffff; --face:#2b2a28;
+  --shadow:0 1px 0 rgba(31,30,29,.04),0 8px 24px -12px rgba(31,30,29,.18);
 }
 @media (prefers-color-scheme: dark){
-  :root{--bg:#0a0a0a;--ink:#fafafa;--ink2:#d4d4d4;--muted:#a3a3a3;--line:#262626;--soft:#141414;--bar0:#404040;--bar1:#fafafa}
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2128; --ink:#e6edf3; --ink2:#c9d1d9; --muted:#8b949e; --line:#30363d;
+    --accent:#e0896a; --accent-ink:#0d1117; --accent-soft:#3a2419;
+    --green:#3fb950; --green-soft:#12261a; --purple:#a371f7; --red:#f85149;
+    --code:#161b22; --term:#010409; --term-ink:#e6edf3; --term-muted:#8b949e;
+    --opus:#e0896a; --sonnet:#d9a441; --haiku:#6fb383; --bot:#21262d; --face:#0d1117;
+    --shadow:0 1px 0 rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.7);
+  }
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.7 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
-a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
-a:hover{text-decoration-thickness:2px}
-.wrap{max-width:960px;margin:0 auto;padding:0 24px}
-.narrow{max-width:680px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16.5px/1.65 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline;text-underline-offset:3px}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+.mono,code,pre,.diff,.term{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
+.diff,pre{tab-size:4}
+code{font-size:.88em;background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
 
-nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
-nav .wrap{display:flex;align-items:center;gap:26px;height:56px;overflow-x:auto;white-space:nowrap}
-nav .brand{font-weight:600;letter-spacing:-.01em;text-decoration:none;margin-right:auto}
-nav a{font-size:14px;color:var(--muted);text-decoration:none} nav a:hover{color:var(--ink)}
+.repohead{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.repohead .wrap{display:flex;align-items:center;gap:14px;height:54px}
+.crumb{font-size:15.5px;display:flex;align-items:center;gap:8px;white-space:nowrap;color:var(--ink);min-width:0}
+.crumb b{font-weight:600}
+.crumb svg{flex:none}
+.pill{font:500 11.5px Inter;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--muted)}
+.ghbtn{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;border:1px solid var(--line);background:var(--surface2);color:var(--ink);padding:5px 12px;border-radius:6px;white-space:nowrap}
+.ghbtn:hover{text-decoration:none;border-color:var(--muted)}
+.tabs{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:54px;z-index:19}
+.tabs .wrap{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tabs a{color:var(--ink2);font-size:14px;padding:10px 12px;border-bottom:2px solid transparent;white-space:nowrap}
+.tabs a:hover{text-decoration:none;border-color:var(--line)}
+.tabs a.on{border-color:var(--accent);font-weight:600;color:var(--ink)}
+section,header{scroll-margin-top:110px}
 
-header{padding:112px 0 88px;border-bottom:1px solid var(--line)}
-.kicker{font:500 12px/1 "JetBrains Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-h1{font-size:clamp(38px,6vw,64px);line-height:1.05;letter-spacing:-.035em;font-weight:700;margin:22px 0 26px;max-width:820px}
-.lede{font-size:20px;line-height:1.6;color:var(--ink2);max-width:680px;margin:0}
-.meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:34px;font-size:14px;color:var(--muted)}
-.meta a{color:var(--ink)}
+.hero{padding:68px 0 40px}
+.hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;align-items:center}
+.kicker{font:500 12px/1 "JetBrains Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:"Source Serif 4",Georgia,serif;font-weight:600;font-size:clamp(36px,5.2vw,58px);line-height:1.04;letter-spacing:-.02em;margin:18px 0 20px}
+.lede{font-size:18.5px;line-height:1.6;color:var(--ink2);margin:0 0 26px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;font-weight:600;font-size:14.5px;border:1px solid var(--line);color:var(--ink);background:var(--surface)}
+.btn:hover{text-decoration:none;border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.stat{padding:30px 24px 30px 0}
-.stat + .stat{padding-left:24px;border-left:1px solid var(--line)}
-.stat .v{font-size:40px;font-weight:600;letter-spacing:-.035em;line-height:1;font-variant-numeric:tabular-nums}
-.stat .l{font-size:14px;color:var(--muted);margin-top:10px;line-height:1.45}
+.term{background:var(--term);color:var(--term-ink);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;border:1px solid var(--line);min-width:0}
+.term .bar{display:flex;gap:7px;padding:11px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.07)}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:#5c5a55;display:block}
+.term .bar span{margin-left:8px;font:12px "JetBrains Mono",monospace;color:var(--term-muted)}
+.term pre{margin:0;padding:16px 18px 18px;font-size:12.6px;line-height:1.75;min-height:330px;white-space:pre-wrap;word-break:break-word}
+.t-muted{color:var(--term-muted)} .t-ok{color:#56d364} .t-acc{color:#f0a283} .t-son{color:#e3b341} .t-hai{color:#7ee2a8} .t-pr{color:#d2a8ff}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--term-ink);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
 
-section{padding:96px 0;border-bottom:1px solid var(--line)}
-.num{font:500 12px/1 "JetBrains Mono",monospace;color:var(--muted);letter-spacing:.06em;margin-bottom:18px}
-h2{font-size:clamp(28px,3.6vw,38px);line-height:1.15;letter-spacing:-.03em;font-weight:700;margin:0 0 20px;max-width:760px}
-h3{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
-p{margin:0 0 16px;color:var(--ink2)}
-.muted{color:var(--muted)}
+.numbers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.num .v{font-family:"Source Serif 4",Georgia,serif;font-size:38px;font-weight:600;letter-spacing:-.02em;line-height:1.05}
+.num .v small{font-size:17px;color:var(--muted);font-weight:500;font-family:Inter}
+.num .l{font-size:14px;color:var(--ink2);margin-top:8px;line-height:1.45}
+.num .k{font:500 11px "JetBrains Mono",monospace;color:var(--muted);margin-top:10px;text-transform:uppercase;letter-spacing:.05em}
+.fine{font-size:13px;color:var(--muted);margin:14px 0 0;line-height:1.55}
 
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:48px}
-.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
-.item{border-top:1px solid var(--ink);padding-top:18px}
-.item p{font-size:15.5px;margin:0}
+section{padding:76px 0;border-top:1px solid var(--line)}
+.eyebrow{font:500 12px "JetBrains Mono",monospace;color:var(--muted);letter-spacing:.05em;margin-bottom:12px}
+h2{font-family:"Source Serif 4",Georgia,serif;font-weight:600;font-size:clamp(28px,3.4vw,38px);line-height:1.15;letter-spacing:-.015em;margin:0 0 14px;max-width:800px}
+h3{font-size:16.5px;font-weight:600;margin:0 0 6px}
+p{margin:0 0 14px;color:var(--ink2)}
+.narrow{max-width:720px}
 
-table{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0 0}
-th,td{text-align:left;padding:13px 12px 13px 0;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
-td b{font-weight:600;color:var(--ink)}
+.stage{margin-top:30px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 14px 14px;box-shadow:var(--shadow);overflow:hidden}
+.stage svg{width:100%;height:auto;display:block}
+.bot .body{fill:var(--bot);stroke:var(--ink);stroke-width:2;transition:stroke .3s}
+.bot .face{fill:var(--face)}
+.bot .eye{fill:#f5f3ee;transform-box:fill-box;transform-origin:center;animation:look 5s ease-in-out infinite}
+.bot .mouth{stroke:#f5f3ee;stroke-width:2.2;stroke-linecap:round;fill:none}
+.bot .ant{stroke:var(--ink);stroke-width:2}
+.bot .feet{fill:var(--ink)}
+.bot .bob{animation:bob 3.2s ease-in-out infinite}
+.bot.b2 .bob{animation-delay:-.6s} .bot.b3 .bob{animation-delay:-1.2s} .bot.b4 .bob{animation-delay:-1.8s} .bot.b5 .bob{animation-delay:-2.4s}
+.bot.b2 .eye{animation-delay:-1s} .bot.b3 .eye{animation-delay:-2s} .bot.b4 .eye{animation-delay:-3s} .bot.b5 .eye{animation-delay:-4s}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes look{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.12)}}
+.bot.active .body{stroke:var(--accent);stroke-width:3}
+.glow{opacity:0;transition:opacity .3s}
+.bot.active .glow{opacity:1}
+.stage .lab{font:600 13.5px Inter;fill:var(--ink)}
+.stage .sub{font:500 11.5px "JetBrains Mono",monospace;fill:var(--muted)}
+.stage .rail{stroke:var(--line);stroke-width:2;stroke-dasharray:4 6}
+.agentgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:16px}
+.agentgrid .card{padding:16px;box-shadow:none}
+.agentgrid p{font-size:13.8px;margin:0;line-height:1.5}
+.model{display:inline-block;font:600 11px "JetBrains Mono",monospace;padding:2px 7px;border-radius:999px;margin:2px 0 8px;border:1px solid}
+.m-opus{color:var(--opus);border-color:var(--opus)} .m-son{color:var(--sonnet);border-color:var(--sonnet)} .m-hai{color:var(--haiku);border-color:var(--haiku)}
 
-figure{margin:40px 0 0}
-figcaption{font-size:13.5px;color:var(--muted);margin-top:14px}
-.panel{border:1px solid var(--line);border-radius:4px;padding:28px}
-svg text{font-family:Inter,system-ui,sans-serif}
+.pr{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);margin-top:28px}
+.pr .top{padding:18px 20px;border-bottom:1px solid var(--line)}
+.pr .title{font-size:20px;font-weight:600}
+.pr .title span{color:var(--muted);font-weight:400}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border-radius:999px;padding:4px 11px;color:#fff;background:var(--purple)}
+.label{display:inline-block;font:600 11.5px Inter;border-radius:999px;padding:2px 9px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
+.pr .meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13.5px;color:var(--muted)}
+.pr .cols{display:grid;grid-template-columns:1fr 1fr}
+.pr .col{padding:16px 20px;min-width:0}
+.pr .col + .col{border-left:1px solid var(--line)}
+.check{display:flex;gap:10px;align-items:baseline;font-size:14px;padding:7px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.check:last-child{border-bottom:0}
+.check .ok{color:var(--green);font-weight:700}
+.check .d{color:var(--muted);font:12px "JetBrains Mono",monospace}
+.diff{font:12.5px/1.65 "JetBrains Mono",monospace;background:var(--code);border-top:1px solid var(--line);overflow-x:auto}
+.diff .h{padding:6px 16px;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--line)}
+.diff div{padding:0 16px;white-space:pre}
+.diff .a{background:var(--green-soft)} .diff .a::before{content:"+ ";color:var(--green)}
+.diff .c::before{content:"  "}
+.review{display:flex;gap:12px;padding:16px 20px;border-top:1px solid var(--line);align-items:flex-start}
+.review svg{flex:none}
+.review p{margin:0;font-size:14px}
+.review b{color:var(--ink)}
+
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+.feat .card{box-shadow:none}
+.feat p{font-size:14.5px;margin:0}
+.feat .ic{font:600 12px "JetBrains Mono",monospace;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:3px 8px;display:inline-block;margin-bottom:10px}
+
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{text-align:left;padding:11px 12px 11px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+th{font:600 11.5px Inter;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:13.5px}
+tr.best td{background:var(--accent-soft)}
+tr.best td:first-child{padding-left:8px}
+.tablecard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 18px 4px;overflow-x:auto}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
 .chart{width:100%;height:auto;display:block}
-.chart .gl{stroke:var(--line)} .chart .lab{fill:var(--ink);font-size:13px;font-weight:500}
-.chart .val{fill:var(--ink);font:500 12.5px "JetBrains Mono",monospace} .chart .val0{fill:var(--muted);font:500 12.5px "JetBrains Mono",monospace}
+.chart .lab{fill:var(--ink);font:500 12.5px Inter}
+.chart .val{fill:var(--ink);font:500 12px "JetBrains Mono",monospace}
 .bar{transition:width 1s cubic-bezier(.25,.8,.25,1)}
-.key{display:flex;gap:22px;font-size:13px;color:var(--muted);margin-top:14px}
-.key i{display:inline-block;width:10px;height:10px;margin-right:7px;vertical-align:0}
+figcaption{font-size:13px;color:var(--muted);margin-top:10px}
 
-.pipe{width:100%;height:auto;display:block}
-.pipe rect{fill:var(--bg);stroke:var(--ink);stroke-width:1.2}
-.pipe .soft{stroke:var(--line);stroke-width:1.2}
-.pipe text{fill:var(--ink);font-size:13.5px;font-weight:600}
-.pipe .s{fill:var(--muted);font-size:11.5px;font-weight:400}
-.pipe path{stroke:var(--muted);stroke-width:1.2;fill:none}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px}
+.vs .big{font-family:"Source Serif 4",Georgia,serif;font-size:30px;font-weight:600;margin:6px 0 2px}
+.vs ul{margin:12px 0 0;padding-left:18px;color:var(--ink2);font-size:14.5px}
+.vs li{margin-bottom:6px}
+.tag{font:600 10.5px "JetBrains Mono",monospace;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:1px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.m{color:var(--green);border-color:var(--green)} .tag.e{color:var(--sonnet);border-color:var(--sonnet)}
+.fit{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.fit .card{box-shadow:none}
+.fit .yes{border-top:3px solid var(--green)} .fit .no{border-top:3px solid var(--muted)}
+.fit ul{margin:6px 0 0;padding-left:18px;font-size:14.5px;color:var(--ink2)}
 
-ol.steps{list-style:none;padding:0;margin:0;counter-reset:s}
-ol.steps li{counter-increment:s;display:grid;grid-template-columns:48px 1fr;padding:22px 0;border-bottom:1px solid var(--line)}
-ol.steps li::before{content:counter(s,decimal-leading-zero);font:500 13px "JetBrains Mono",monospace;color:var(--muted);padding-top:2px}
-ol.steps h3{margin-bottom:4px} ol.steps p{margin:0;font-size:15.5px}
+.fails{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}
+.fails .card{box-shadow:none;border-left:3px solid var(--red)}
+.fails p{font-size:14.5px;margin:0}
 
-pre{background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:22px;overflow:auto;font:13.5px/1.75 "JetBrains Mono",monospace;color:var(--ink);margin:0}
-.btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
-.btn{display:inline-block;padding:11px 18px;border:1px solid var(--ink);border-radius:4px;text-decoration:none;font-size:15px;font-weight:500}
-.btn.solid{background:var(--ink);color:var(--bg)}
-.btn:hover{text-decoration:none;opacity:.85}
-footer{padding:44px 0 64px;font-size:13.5px;color:var(--muted)}
+pre.cmd{background:var(--term);color:var(--term-ink);border-radius:12px;padding:18px 20px;overflow:auto;font-size:13px;line-height:1.8;margin:0;border:1px solid var(--line)}
+pre.cmd .c{color:var(--term-muted)}
 
-.fade{opacity:0;transform:translateY(10px);transition:opacity .7s ease,transform .7s ease}
+footer{padding:36px 0 60px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}
+
+.fade{opacity:0;transform:translateY(10px);transition:opacity .6s ease,transform .6s ease}
 .fade.in{opacity:1;transform:none}
 
-@media (max-width:820px){
-  .stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){padding-left:0;border-left:0}.stat:nth-child(n+3){border-top:1px solid var(--line)}
-  .cols,.cols3{grid-template-columns:1fr;gap:28px} section{padding:72px 0} header{padding:80px 0 64px}
-  th:nth-child(1),td:nth-child(1){padding-right:8px}
+@media (max-width:900px){
+  .hero .grid,.two,.vs,.fit,.fails,.pr .cols{grid-template-columns:1fr}
+  .pr .col + .col{border-left:0;border-top:1px solid var(--line)}
+  .numbers,.feat,.agentgrid{grid-template-columns:1fr 1fr}
+  .hero{padding:40px 0 28px}
+  section{padding:56px 0}
+  .pill,.ghbtn .hide{display:none}
 }
-@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}.fade{opacity:1;transform:none}}
-
-.pipe .dec{fill:var(--ink)} .pipe .dec + text{fill:var(--bg)}
-.tag{display:inline-block;font:500 11.5px "JetBrains Mono",monospace;border:1px solid var(--ink);border-radius:3px;padding:1px 6px;margin-left:6px;vertical-align:1px}
-.tag.soft{border-color:var(--line);color:var(--muted)}
-.mono{font-family:"JetBrains Mono",monospace;font-size:14px}
-.wide{overflow-x:auto}
+@media (max-width:560px){.numbers,.feat,.agentgrid{grid-template-columns:1fr}.term pre{min-height:0;font-size:11.5px}.crumb span:first-of-type{display:none}}
+.diff,.diff *,.term,.term *,pre,pre *,code{font-variant-ligatures:none!important;font-feature-settings:"liga" 0,"calt" 0!important}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}.fade{opacity:1;transform:none}}
 </style>
 </head>
 <body>
-<nav><div class="wrap">
-  <a class="brand" href="#">AI-SDLC Pipeline</a>
-  <a href="#problem">Problem</a><a href="#how">How it works</a><a href="#tokens">Tokens</a><a href="#results">Results</a><a href="#broke">What broke</a><a href="#dashboard">Dashboard</a><a href="#run">Run</a>
-  <a href="https://github.com/dheepakkaran/agentic-sdlc-go">GitHub</a>
+
+<div class="repohead"><div class="wrap">
+  <div class="crumb">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.71 1.71.75.75 0 0 1-1.06 1.06A2.49 2.49 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.71A2.49 2.49 0 0 1 4.5 9h8Z"/></svg>
+    <span>dheepakkaran</span><span style="color:var(--muted)">/</span><b>agentic-sdlc-go</b><span class="pill">Public</span>
+  </div>
+  <a class="ghbtn" href="https://github.com/dheepakkaran/agentic-sdlc-go"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="hide">View on</span> GitHub</a>
+</div></div>
+<nav class="tabs"><div class="wrap">
+  <a class="on" href="#top">Overview</a><a href="#agents">Agents</a><a href="#pr">A real PR</a><a href="#tokens">Token engineering</a><a href="#results">Results</a><a href="#vs">vs. by hand</a><a href="#broke">What broke</a><a href="#dashboard">Dashboard</a><a href="#run">Run it</a>
 </div></nav>
 
-<header>
-  <div class="wrap">
-    <div class="kicker">Go · Claude API · November 2026</div>
-    <h1>A GitHub issue goes in. A tested, scanned, deployed pull request comes out. A person still merges it.</h1>
-    <p class="lede">Role agents (analyst, architect, developer, QA, docs) take an issue for a small Go service through requirements, a design decision, code with tests, review and release notes. The pull request then has to pass the same CI gates as human code. Every model call is logged with its tokens and cost.</p>
-    <div class="meta"><span>Go · Claude Opus, Sonnet, Haiku · GitHub Actions · Docker · Kubernetes</span><a href="https://github.com/dheepakkaran/agentic-sdlc-go">Source code</a><a href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">What broke</a></div>
+<header class="hero" id="top"><div class="wrap">
+  <div class="grid">
+    <div>
+      <div class="kicker">Agentic SDLC · Go · Claude API</div>
+      <h1>Small issues in. Reviewed, tested pull requests out.</h1>
+      <p class="lede">Five role agents take a GitHub issue for a Go service through requirements, a scope decision, code with tests, review and release notes. The pull request then has to pass the same CI gates as human code, and a person merges it.</p>
+      <div class="btns">
+        <a class="btn primary" href="https://github.com/dheepakkaran/agentic-sdlc-go">Source code</a>
+        <a class="btn" href="https://github.com/dheepakkaran/agentic-sdlc-go/pulls?q=is%3Apr+label%3Aai-authored">Agent pull requests</a>
+        <a class="btn" href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">What broke</a>
+      </div>
+    </div>
+    <div class="term" aria-label="A replay of the real run of issue #3">
+      <div class="bar"><i></i><i></i><i></i><span>~/agentic-sdlc-go · issue #3</span></div>
+      <pre id="termbody"></pre>
+    </div>
   </div>
-</header>
+</div></header>
 
 <div class="wrap">
-  <div class="stats">
-    <div class="stat"><div class="v" data-count="3" data-suffix="/3">3/3</div><div class="l">issues turned into PRs that passed all 5 CI checks and were merged by a person.</div></div>
-    <div class="stat"><div class="v" data-count="0.17" data-dec="2" data-prefix="$">$0.17</div><div class="l">average model cost per merged issue, every role included.</div></div>
-    <div class="stat"><div class="v" data-count="43" data-suffix="%">43%</div><div class="l">cheaper than the same pipeline with every role on the strongest model (issue #1).</div></div>
-    <div class="stat"><div class="v" data-count="2" data-suffix="×">2×</div><div class="l">CI blocked an agent PR that the agents themselves had approved.</div></div>
+  <div class="numbers">
+    <div class="card num fade"><div class="v">~7 <small>min</small></div><div class="l">per small issue, agents plus a person's review, vs. about an hour by hand.</div><div class="k">2 min measured · rest estimated</div></div>
+    <div class="card num fade"><div class="v">~11<small>×</small></div><div class="l">lower cost per issue: ~$5.60 (model + review) vs. ~$65 of engineer time.</div><div class="k">BLS median pay · see below</div></div>
+    <div class="card num fade"><div class="v">3<small>/3</small></div><div class="l">issues became PRs that passed all 5 CI checks and were merged by a person.</div><div class="k">measured</div></div>
+    <div class="card num fade"><div class="v">43<small>%</small></div><div class="l">cheaper than the same pipeline with every agent on the strongest model.</div><div class="k">measured · issue #1</div></div>
   </div>
+  <p class="fine">For small, well-scoped issues on a small service: three issues of 98–146 changed lines, mostly tests. This is not a claim about large or vague work. Engineer pay is the U.S. Bureau of Labor Statistics median for software developers, $135,980 a year (May 2025), which is $65.38 an hour, wage only. The 1-hour hand-coding time and the 5-minute review are estimates, not measurements. Details in <a href="#vs">vs. by hand</a>.</p>
 </div>
 
-<section id="problem">
+<section id="agents" style="margin-top:56px">
   <div class="wrap">
-    <div class="num">01 — Problem</div>
-    <h2 class="fade">AI writes code fast. Shipping it still needs requirements, review, tests, security and a release decision.</h2>
-    <div class="narrow fade">
-      <p>A coding assistant can produce a feature in a minute. A team still has to know what was asked, check that the design fits, test it, scan it, deploy it and decide it is ready. It also has to know what the AI costs and whether it is helping. This project builds that loop for one small service and measures it.</p>
-      <p>The service is a network device inventory API in Go (routers, switches, OLTs): create, list, get, delete. It is deliberately small, so every agent change can be read in full. Three real GitHub issues went through the pipeline: set a device's status, filter the list by site and role, and validate management IP addresses.</p>
+    <div class="eyebrow">01 · THE AGENTS</div>
+    <h2>Five agents, three models. The strongest model only where a decision is made.</h2>
+    <p class="narrow">Each agent has one job, a fixed JSON answer format and only the context it needs. Cheap models do the writing; their answers are checked by code and redone one model up when the check fails. Code, not a model, decides whether anything ships.</p>
+    <div class="stage fade">
+      <svg id="bots" viewBox="0 0 1000 250" role="img" aria-label="Analyst, Architect, Developer, QA and Docs agents in a row; a work card moves from one to the next until the pull request is merged"></svg>
+    </div>
+    <div class="agentgrid">
+      <div class="card fade"><h3>Analyst</h3><span class="model m-hai">Haiku → Sonnet</span><p>Turns the issue into testable requirements. Checked by code; an empty answer is redone on Sonnet.</p></div>
+      <div class="card fade"><h3>Architect</h3><span class="model m-opus">Opus · decides</span><p>Approves or rejects the scope from a map of the code, and names the only files that may change.</p></div>
+      <div class="card fade"><h3>Developer</h3><span class="model m-son">Sonnet → Opus</span><p>Writes small edits and table-driven tests until gofmt, vet, race tests and lint pass. Opus only after a failed gate.</p></div>
+      <div class="card fade"><h3>QA</h3><span class="model m-opus">Opus · decides</span><p>Gives the merge verdict from the diff, judged against the issue and the approved plan.</p></div>
+      <div class="card fade"><h3>Docs</h3><span class="model m-hai">Haiku → Sonnet</span><p>Writes the PR description and changelog with the real field names, checked by code like the analyst.</p></div>
     </div>
   </div>
 </section>
 
-<section id="how">
+<section id="pr">
   <div class="wrap">
-    <div class="num">02 — How it works</div>
-    <h2 class="fade">Models where judgment is needed, plain tools where the answer is yes or no.</h2>
-    <figure class="fade wide">
-      <svg class="pipe" viewBox="0 0 900 250" role="img" aria-label="Issue to analyst, architect, developer and local gates loop, QA, docs, then CI on the pull request, then a person merges">
-        <g>
-          <rect x="0" y="20" width="110" height="56" rx="3"/><text x="14" y="44">Issue</text><text class="s" x="14" y="62">GitHub</text>
-          <rect x="140" y="20" width="120" height="56" rx="3"/><text x="154" y="44">Analyst</text><text class="s" x="154" y="62">Haiku → Sonnet</text>
-          <rect x="290" y="20" width="120" height="56" rx="3" class="dec"/><text x="304" y="44">Architect</text><text class="s" x="304" y="62" style="fill:var(--bg)">Opus · scope call</text>
-          <rect x="440" y="20" width="120" height="56" rx="3"/><text x="454" y="44">Developer</text><text class="s" x="454" y="62">Sonnet → Opus</text>
-          <rect x="590" y="20" width="120" height="56" rx="3" class="dec"/><text x="604" y="44">QA</text><text class="s" x="604" y="62" style="fill:var(--bg)">Opus · merge call</text>
-          <rect x="740" y="20" width="120" height="56" rx="3"/><text x="754" y="44">Docs</text><text class="s" x="754" y="62">Haiku → Sonnet</text>
-          <rect x="440" y="116" width="120" height="50" rx="3" class="soft"/><text x="454" y="137">Local gates</text><text class="s" x="454" y="154">fmt · vet · race · lint</text>
-          <rect x="420" y="194" width="440" height="50" rx="3" class="soft"/><text x="434" y="215">CI on the pull request</text><text class="s" x="434" y="232">test · lint · govulncheck + gosec · image scan + kind deploy · release gate</text>
-          <rect x="240" y="194" width="140" height="50" rx="3"/><text x="254" y="215">Person</text><text class="s" x="254" y="232">reviews + merges</text>
-          <path d="M110 48H140M260 48H290M410 48H440M560 48H590M710 48H740"/>
-          <path d="M492 76V116M508 116V76"/>
-          <path d="M800 76V194M420 219H380"/>
-        </g>
-      </svg>
-      <figcaption>Filled boxes make decisions and run on the strongest model. The developer loops against the local gates until they pass. Nothing an agent says decides whether code ships: the CI gates and a person do.</figcaption>
-    </figure>
-    <ol class="steps fade" style="margin-top:48px">
-      <li><div><h3>Analyst turns the issue into testable requirements</h3><p>Cheapest model. Its answer is checked by code (a real summary, at least one requirement, two acceptance criteria) and redone one model up if it fails.</p></div></li>
-      <li><div><h3>Architect approves the scope and names the files</h3><p>Strongest model, from a map of the code (declarations only). It can reject the issue. Its file list is the only set of files the developer may write.</p></div></li>
-      <li><div><h3>Developer edits, gates answer</h3><p>Mid model. It returns small edits, not whole files. gofmt, vet, tests with the race detector and golangci-lint run on every attempt; only the failing lines go back. The last green version is kept, so a bad revision is rolled back.</p></div></li>
-      <li><div><h3>QA gives the merge verdict from the diff</h3><p>Strongest model, judged against the issue and the approved plan. Only findings about planned code go back to the developer; anything else stops for a person.</p></div></li>
-      <li><div><h3>Docs writes the PR and the changelog, then CI decides</h3><p>Cheapest model with the same check-and-escalate rule. The PR must then pass CI, including a deterministic release readiness gate (every job green, service coverage at least 80%, tests and changelog with every service change, the PR links its issue).</p></div></li>
-    </ol>
+    <div class="eyebrow">02 · A REAL PULL REQUEST</div>
+    <h2>Issue #3: "A device was created with mgmt_ip 10.0.0.300 and broke the config push job."</h2>
+    <p class="narrow">Everything below comes from the real run and PR #6. The developer got it right on the first attempt, QA approved with two low-severity notes, all five checks passed, and a person merged it.</p>
+    <div class="pr fade">
+      <div class="top">
+        <div class="title">fix(inventory): validate mgmt_ip as IPv4/IPv6 <span>#6</span></div>
+        <div class="meta"><span class="badge"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .01V3.25Z"/></svg>Merged</span><span class="label">ai-authored</span><span>+115 −0 · 3 files</span><span>opened → merged in 8 min</span><span>model cost $0.173</span></div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <h3 style="font-size:14px">Checks</h3>
+          <div class="check"><span class="ok">✓</span>test <span class="d">gofmt · vet · race · coverage</span></div>
+          <div class="check"><span class="ok">✓</span>lint <span class="d">golangci-lint</span></div>
+          <div class="check"><span class="ok">✓</span>security <span class="d">govulncheck · gosec</span></div>
+          <div class="check"><span class="ok">✓</span>image <span class="d">Trivy · kind deploy · smoke test</span></div>
+          <div class="check"><span class="ok">✓</span>release-readiness <span class="d">jobs · coverage · changelog · issue link</span></div>
+        </div>
+        <div class="col">
+          <h3 style="font-size:14px">Requirements the analyst wrote (3 of 9)</h3>
+          <p style="font-size:13.8px">Create with mgmt_ip "10.0.0.300" → 400, nothing stored.</p>
+          <p style="font-size:13.8px">Create with mgmt_ip "10.0.0.1" → 201, stored as given.</p>
+          <p style="font-size:13.8px;margin:0">Create with mgmt_ip "2001:db8::1" → 201, stored as given.</p>
+        </div>
+      </div>
+      <div class="diff">
+        <div class="h">internal/inventory/store.go</div>
+        <div class="c">	if d.Status != "" &amp;&amp; d.Status != "up" &amp;&amp; d.Status != "down" {</div>
+        <div class="c">		return ErrInvalid</div>
+        <div class="c">	}</div>
+        <div class="a">	if d.MgmtIP != "" {</div>
+        <div class="a">		a, err := netip.ParseAddr(d.MgmtIP)</div>
+        <div class="a">		if err != nil || a.Zone() != "" {</div>
+        <div class="a">			return fmt.Errorf("%w: mgmt_ip must be a valid IPv4 or IPv6 address", ErrInvalid)</div>
+        <div class="a">		}</div>
+        <div class="a">	}</div>
+        <div class="c">	return nil</div>
+      </div>
+      <div class="review">
+        <svg width="34" height="34" viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="32" height="27" rx="9" fill="var(--bot)" stroke="var(--ink)" stroke-width="2"/><rect x="9" y="13" width="22" height="15" rx="5" fill="var(--face)"/><rect x="13" y="17" width="4" height="5" rx="2" fill="#f5f3ee"/><rect x="23" y="17" width="4" height="5" rx="2" fill="#f5f3ee"/><line x1="20" y1="8" x2="20" y2="4" stroke="var(--ink)" stroke-width="2"/><circle cx="20" cy="3.5" r="3" fill="var(--opus)"/></svg>
+        <p><b>QA agent</b> <span class="model m-opus" style="margin:0 0 0 4px">Opus</span> approved these changes<br>Two low-severity notes, both about test hygiene: one test passes for the wrong reason, and some response bodies are not closed.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="tokens">
   <div class="wrap">
-    <div class="num">03 — Token engineering</div>
-    <h2 class="fade">Spend the strong model on decisions. Send each role only what it needs.</h2>
-    <div class="cols3" style="margin-top:8px">
-      <div class="item fade"><h3>Model routing</h3><p>Opus for the scope decision and the merge verdict, Sonnet for code, Haiku for requirements and docs. Escalation happens only on evidence: a failed check or a failed gate.</p></div>
-      <div class="item fade"><h3>Context packing</h3><p>A repo map of declarations is 1,116 characters instead of 6,295 for the source (82% smaller). Only the developer sees full files, only those the architect picked. QA sees the diff.</p></div>
-      <div class="item fade"><h3>Structured output</h3><p>Every role answers in a strict JSON schema: no prose to pay for, no free text to parse. Validators check what the schema cannot: an empty answer is still schema-valid.</p></div>
-      <div class="item fade"><h3>Edits, not files</h3><p>The developer sends find-and-replace edits that must match exactly once. On issue #1, run output fell from 13,320 tokens (whole files) to 8,565.</p></div>
-      <div class="item fade"><h3>Compact feedback</h3><p>A failed gate sends back only the failing check and its last 40 lines. Retries continue the same conversation, so the prefix is read from cache.</p></div>
-      <div class="item fade"><h3>Caching, measured</h3><p>A probe showed the output schema is part of the cached prefix, so roles never share a cache. Caching is now placed only where a prompt is re-sent. At this repo size it saved little: 3.6% of prompt tokens were cache reads.</p></div>
+    <div class="eyebrow">03 · TOKEN ENGINEERING</div>
+    <h2>Spend the strong model on decisions. Send each agent only what it needs.</h2>
+    <div class="feat">
+      <div class="card fade"><span class="ic">route()</span><h3>Model routing</h3><p>Opus for scope and merge decisions, Sonnet for code, Haiku for requirements and docs. Escalation happens only on evidence: a failed check or a failed gate.</p></div>
+      <div class="card fade"><span class="ic">repomap</span><h3>Context packing</h3><p>A map of declarations is 1,116 characters instead of 6,295 for the source, 82% smaller. Only the developer sees full files, and only the ones the architect picked. QA sees the diff.</p></div>
+      <div class="card fade"><span class="ic">json_schema</span><h3>Structured output</h3><p>Every agent answers in a strict JSON schema: no prose to pay for, nothing to parse. Validators catch what a schema cannot, such as a valid but empty answer.</p></div>
+      <div class="card fade"><span class="ic">edits[]</span><h3>Edits, not files</h3><p>The developer sends find-and-replace edits that must match exactly once. On issue #1, run output fell from 13,320 tokens to 8,565.</p></div>
+      <div class="card fade"><span class="ic">tail(40)</span><h3>Compact feedback</h3><p>A failed gate sends back only the failing check and its last 40 lines. The retry continues the same conversation, so its start is read from cache.</p></div>
+      <div class="card fade"><span class="ic">cache_control</span><h3>Caching, measured</h3><p>A probe showed the output schema is part of the cached prefix, so agents never share a cache. Breakpoints sit only where a prompt is re-sent. At this size it saved little: 3.6% of prompt tokens.</p></div>
     </div>
   </div>
 </section>
 
 <section id="results">
   <div class="wrap">
-    <div class="num">04 — Results</div>
-    <h2 class="fade">Issue #1, five ways. The harness changed four times because of what the ledger showed.</h2>
-    <div class="fade">
+    <div class="eyebrow">04 · RESULTS</div>
+    <h2>Issue #1, five ways. The harness changed four times because of what the ledger showed.</h2>
+    <div class="tablecard fade" style="margin-top:22px">
       <table>
-        <thead><tr><th>Run on issue #1</th><th>Cost</th><th>Outcome</th><th>What it showed</th></tr></thead>
+        <thead><tr><th>Run on issue #1</th><th>Model cost</th><th>Outcome</th><th>What it showed</th></tr></thead>
         <tbody>
           <tr><td>Harness v1</td><td class="n">$0.209</td><td>approved</td><td>Paid the cache-write premium on every call and read nothing back; the developer re-sent whole files.</td></tr>
           <tr><td>Harness v2</td><td class="n">$0.333</td><td>not approved</td><td>Edits instead of files, but the cheap analyst returned a placeholder and a QA revision escalated to Opus.</td></tr>
-          <tr><td><b>Harness v3</b></td><td class="n"><b>$0.177</b></td><td>approved, merged (PR #4)</td><td>Check-and-escalate on cheap output; escalation only after a failed gate.</td></tr>
-          <tr><td>Same pipeline, every role on Opus</td><td class="n">$0.308</td><td>approved</td><td>Routing saves 43% on the same work.</td></tr>
-          <tr><td>One Opus call with the whole repo</td><td class="n">$0.159</td><td>gates passed</td><td>Cheapest, but code only: no requirements, design decision, review, docs or guardrails.</td></tr>
+          <tr class="best"><td><b>Harness v3</b></td><td class="n"><b>$0.177</b></td><td>merged (PR #4)</td><td>Check-and-escalate on cheap output; escalation only after a failed gate.</td></tr>
+          <tr><td>Same pipeline, every agent on Opus</td><td class="n">$0.308</td><td>approved</td><td>Routing saves 43% on the same work.</td></tr>
+          <tr><td>One Opus call with the whole repo</td><td class="n">$0.159</td><td>gates passed</td><td>Cheapest, but code only: no requirements, scope decision, review, docs or guardrails.</td></tr>
         </tbody>
       </table>
     </div>
-    <div class="cols" style="margin-top:64px">
-      <div class="fade">
+    <div class="two">
+      <div class="card fade">
         <h3>Where the money goes (3 merged runs, $0.51)</h3>
-        <svg id="roles" class="chart" viewBox="0 0 520 250" role="img" aria-label="Cost per role"></svg>
-        <figcaption>The two decisions on Opus are half the cost. Requirements and docs on Haiku, cascade included, are 6%.</figcaption>
+        <svg id="roles" class="chart" viewBox="0 0 520 230" role="img" aria-label="Model cost per agent"></svg>
+        <figcaption>The two decisions on Opus are half the cost. Requirements and docs on Haiku, retries included, are 6%.</figcaption>
       </div>
-      <div class="fade">
-        <h3>Should the cheap model do requirements?</h3>
+      <div class="card fade">
+        <h3>Should the cheap model write requirements?</h3>
         <table>
           <thead><tr><th>Analyst config</th><th>Valid</th><th>Per call</th></tr></thead>
           <tbody>
-            <tr><td>Haiku, effort low</td><td class="n">6 / 9</td><td class="n">~$0.0005</td></tr>
-            <tr><td>Haiku, effort medium</td><td class="n">6 / 9</td><td class="n">~$0.0006</td></tr>
-            <tr><td>Sonnet, effort low</td><td class="n">3 / 3</td><td class="n">~$0.013</td></tr>
+            <tr><td>Haiku, effort low</td><td class="n">6 / 9</td><td class="n">$0.0005</td></tr>
+            <tr><td>Haiku, effort medium</td><td class="n">6 / 9</td><td class="n">$0.0006</td></tr>
+            <tr><td>Sonnet, effort low</td><td class="n">3 / 3</td><td class="n">$0.013</td></tr>
           </tbody>
         </table>
-        <p style="margin-top:18px;font-size:15.5px">Higher effort did not help. Haiku with a check and one Sonnet retry costs about $0.005 per issue against $0.013 for Sonnet alone, and every run still ends with valid requirements.</p>
+        <p style="margin-top:14px;font-size:14.5px">More effort did not help Haiku. Haiku with a check and one Sonnet retry costs about $0.005 per issue against $0.013 for Sonnet alone, and every run still ends with valid requirements.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="vs">
+  <div class="wrap">
+    <div class="eyebrow">05 · VS. BY HAND</div>
+    <h2>On small, generic issues the agents were faster and cheaper. Here is exactly how that is counted.</h2>
+    <div class="vs">
+      <div class="card fade">
+        <h3>Agents, then a person reviews</h3>
+        <div class="big">~7 min · ~$5.62</div>
+        <ul>
+          <li>Agent work: ~2 min per issue, model cost $0.17 <span class="tag m">measured</span></li>
+          <li>CI: ~4 min per PR, unattended <span class="tag m">measured</span></li>
+          <li>Human review before merge: ~5 min, $5.45 <span class="tag e">estimate</span></li>
+        </ul>
+      </div>
+      <div class="card fade">
+        <h3>A software engineer by hand</h3>
+        <div class="big">~1 h · ~$65.38</div>
+        <ul>
+          <li>Read the issue, write the change and ~100 lines of tests, run the checks, write the PR: ~1 hour <span class="tag">assumption</span></li>
+          <li>Pay: $65.38 an hour, the median for U.S. software developers (BLS, May 2025: $135,980 a year), wage only <span class="tag m">official data</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="fit">
+      <div class="card yes fade"><h3>Where this worked</h3><ul><li>Small, well-scoped issues with a clear expected behaviour</li><li>A codebase with good tests and fast CI, so the gates can judge the code</li><li>Changes that stay inside a few files the architect can name</li></ul></div>
+      <div class="card no fade"><h3>Where it is not shown to work</h3><ul><li>Large codebases, cross-service changes, real design trade-offs</li><li>Vague issues: the analyst invented scope once, and QA enforced it</li><li>Code without tests: the gates are what make the agents safe</li></ul></div>
+    </div>
+    <p class="fine">Three issues is a small sample, and the hand-coding time was not timed. Even at 15 minutes by hand ($16) the agent path costs less, and at 5 minutes of review it is the person's time, not the model, that makes up most of the agent-side cost. Source: <a href="https://www.bls.gov/ooh/computer-and-information-technology/software-developers.htm">BLS Occupational Outlook Handbook, Software Developers</a>. Total spent on every run on this page, failures and experiments included: $2.13.</p>
   </div>
 </section>
 
 <section id="broke">
   <div class="wrap">
-    <div class="num">05 — What broke</div>
-    <h2 class="fade">Twelve failures, each with the change it caused.</h2>
-    <div class="cols" style="margin-top:8px">
-      <div class="item fade"><h3>Cheap models return empty answers</h3><p>Haiku twice returned schema-valid but empty output: requirements reading "placeholder", and a PR with no title or changelog. The release gate blocked that PR. Every cheap step now has a validator and one retry a model up.</p></div>
-      <div class="item fade"><h3>CI checked more than the harness</h3><p>An agent PR passed the local gates and QA, then failed CI lint. The same linter now runs inside the developer's loop.</p></div>
-      <div class="item fade"><h3>I broke main</h3><p>I committed an unformatted file the developer may not touch, and three attempts failed for $0.19. The harness now runs the gates on the base before any model call.</p></div>
-      <div class="item fade"><h3>A revision destroyed a green version</h3><p>QA asked for work the issue never mentioned; the revision broke the tests and nothing rolled back. Now the last green version is kept, and QA judges against the issue and the architect's plan.</p></div>
+    <div class="eyebrow">06 · WHAT BROKE</div>
+    <h2>Twelve failures, each with the change it caused.</h2>
+    <div class="fails">
+      <div class="card fade"><h3>Cheap models return empty answers</h3><p>Haiku twice returned schema-valid but empty output: requirements reading "placeholder", and a PR with no title or changelog. The release gate blocked that PR. Every cheap step now has a validator and one retry a model up.</p></div>
+      <div class="card fade"><h3>CI checked more than the harness</h3><p>An agent PR passed the local gates and QA, then failed CI lint. The same linter now runs inside the developer's loop.</p></div>
+      <div class="card fade"><h3>I broke main</h3><p>I committed an unformatted file the developer may not touch, and three attempts failed for $0.19. The harness now runs the gates on the base before any model call.</p></div>
+      <div class="card fade"><h3>A revision destroyed a green version</h3><p>QA asked for work the issue never mentioned; the revision broke the tests and nothing rolled back. Now the last green version is kept, and QA judges against the issue and the plan.</p></div>
     </div>
-    <p class="fade" style="margin-top:36px"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">All twelve, with numbers →</a></p>
+    <p class="fade" style="margin-top:20px"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/blob/main/FAILURES.md">All twelve, with numbers →</a></p>
   </div>
 </section>
 
 <section id="dashboard">
   <div class="wrap">
-    <div class="num">06 — Dashboard</div>
-    <h2 class="fade">AI adoption and engineering cost, from the ledger and the GitHub history.</h2>
-    <div class="stats fade" id="dash-stats" style="margin-bottom:40px"></div>
-    <div class="fade wide">
-      <table id="pr-table"><thead><tr><th>PR</th><th>Title</th><th>Label</th><th>CI</th><th>Opened → merged</th><th>+/−</th></tr></thead><tbody></tbody></table>
-      <figcaption>Built by <span class="mono">go run ./cmd/metrics</span> from <span class="mono">results/ledger.jsonl</span>, <span class="mono">results/runs/</span> and the GitHub API. Data file: <a href="data.js">data.js</a>.</figcaption>
+    <div class="eyebrow">07 · DASHBOARD</div>
+    <h2>AI adoption and engineering cost, built from the ledger and the GitHub history.</h2>
+    <div class="numbers" id="dash-stats" style="margin-top:22px"></div>
+    <div class="tablecard fade" style="margin-top:18px">
+      <table id="pr-table"><thead><tr><th>PR</th><th>Title</th><th>Label</th><th>Checks</th><th>Opened → merged</th><th>Lines</th></tr></thead><tbody></tbody></table>
     </div>
+    <figcaption>Built by <code>go run ./cmd/metrics</code> from <code>results/ledger.jsonl</code>, <code>results/runs/</code> and the GitHub API. Data: <a href="data.js">data.js</a>.</figcaption>
   </div>
 </section>
 
-<section id="run" style="border-bottom:0">
+<section id="run">
   <div class="wrap">
-    <div class="num">07 — Run it</div>
-    <h2 class="fade">Everything runs from one Go binary.</h2>
-    <pre class="fade">cp .env.example .env            # ANTHROPIC_API_KEY=...
+    <div class="eyebrow">08 · RUN IT</div>
+    <h2>One Go binary.</h2>
+    <pre class="cmd fade"><span class="c"># .env holds ANTHROPIC_API_KEY</span>
 go build -o sdlc ./cmd/sdlc
-./sdlc map                      # the repo map the agents see
-./sdlc run -issue 1 -pr         # issue → requirements → plan → code ⇄ gates → QA → docs → PR
-./sdlc run -issue 1 -route opus # the routing comparison: every role on Opus
-./sdlc naive -issue 1           # baseline: one Opus call with the whole repo
-./sdlc redoc -issue 1           # redo only the docs step on an open PR
-go run ./cmd/analyst-eval       # which model should write requirements
-go run ./cmd/metrics            # ledger + GitHub → results/metrics.json</pre>
-    <div class="btns fade"><a class="btn solid" href="https://github.com/dheepakkaran/agentic-sdlc-go">Source on GitHub</a><a class="btn" href="https://github.com/dheepakkaran/agentic-sdlc-go/pulls?q=is%3Apr+label%3Aai-authored">Agent pull requests</a></div>
-    <p class="muted fade" style="margin-top:36px;font-size:14.5px">Limits: three small issues on a 6 KB service, so the routing saving is one comparison, not a benchmark. The single-call baseline was cheaper on this repo; the pipeline pays for requirements, a scope decision, review, docs and guardrails. Total spend for every run on this page, failures and experiments included: $2.13.</p>
+./sdlc map                       <span class="c"># the repo map the agents see</span>
+./sdlc run -issue 1 -pr          <span class="c"># issue → requirements → plan → edits ⇄ gates → QA → docs → PR</span>
+./sdlc run -issue 1 -route opus  <span class="c"># routing comparison: every agent on Opus</span>
+./sdlc naive -issue 1            <span class="c"># baseline: one Opus call with the whole repo</span>
+./sdlc redoc -issue 1            <span class="c"># redo only the docs step on an open PR</span>
+go run ./cmd/analyst-eval        <span class="c"># which model should write requirements</span>
+go run ./cmd/metrics             <span class="c"># ledger + GitHub → results/metrics.json</span></pre>
   </div>
 </section>
 
-<footer><div class="wrap">Dheepak Karan · Independent project · The inventory service and its data are examples, not a production system.</div></footer>
+<footer><div class="wrap">Dheepak Karan · Independent project, November 2026 · The inventory service is an example, not a production system. Not affiliated with Anthropic or GitHub; Claude is a trademark of Anthropic. The agent characters are original drawings made for this page.</div></footer>
 
 <script src="data.js"></script>
 <script>
@@ -282,18 +432,92 @@ const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const 
 const txt = (p, a, s) => { const t = el("text", a, p); t.textContent = s; return t; };
 const M = window.METRICS || {};
 
+/* terminal: replays the real issue #3 run (results/runs/issue-3.json) */
+(() => {
+  const pre = document.getElementById("termbody");
+  const L = [
+    ["$ ./sdlc run -issue 3 -pr", ""],
+    ["issue #3 · Validate management IP addresses", "t-muted"],
+    ["  preflight  ✓ base passes every gate", "t-ok"],
+    ["  analyst    haiku-5-5   → requirements", "t-hai"],
+    ["             check failed → escalate to sonnet-5-5", "t-son"],
+    ["  architect  opus-5-5    → plan: store.go + tests", "t-acc"],
+    ["  developer  sonnet-5-5  → attempt 1 (edits)", "t-son"],
+    ["  gates      ✓ gofmt ✓ vet ✓ test -race ✓ golangci-lint", "t-ok"],
+    ["  qa         opus-5-5    → approve (2 low notes)", "t-acc"],
+    ["  docs       haiku-5-5   → PR body + changelog ✓", "t-hai"],
+    ["  result     gates=true qa=true cost=$0.1732", ""],
+    ["  PR #6      5/5 checks ✓ · merged by a person", "t-pr"]];
+  const esc = s => s.replace(/[&<>]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[c]));
+  if (reduce) { pre.innerHTML = L.map(([s, c]) => `<span class="${c}">${esc(s)}</span>`).join("\n"); return; }
+  let i = 0;
+  const step = () => {
+    if (i >= L.length) { pre.insertAdjacentHTML("beforeend", '\n<span class="cursor"></span>'); setTimeout(() => { pre.textContent = ""; i = 0; step(); }, 5200); return; }
+    const [s, c] = L[i++];
+    if (i > 1) pre.appendChild(document.createTextNode("\n"));
+    const span = document.createElement("span"); span.className = c; pre.appendChild(span);
+    let j = 0; const first = i === 1;
+    const typeIt = () => { j += first ? 1 : 4; span.textContent = s.slice(0, j); if (j < s.length) setTimeout(typeIt, first ? 38 : 14); else setTimeout(step, first ? 450 : 380); };
+    typeIt();
+  };
+  step();
+})();
+
+/* agent characters: original screen-face bots, antenna colored by model tier */
+(() => {
+  const s = document.getElementById("bots");
+  const bots = [["Analyst", "haiku-5-5", "var(--haiku)", "≡"], ["Architect", "opus-5-5", "var(--opus)", "◇"], ["Developer", "sonnet-5-5", "var(--sonnet)", "{ }"], ["QA", "opus-5-5", "var(--opus)", "✓"], ["Docs", "haiku-5-5", "var(--haiku)", "¶"]];
+  el("line", {x1: 60, x2: 940, y1: 221, y2: 221, class: "rail"}, s);
+  const xs = bots.map((_, i) => 100 + i * 200), groups = [];
+  bots.forEach(([name, model, col, sym], i) => {
+    const g = el("g", {class: "bot b" + (i + 1), transform: `translate(${xs[i] - 46},34)`}, s);
+    const bob = el("g", {class: "bob"}, g);
+    el("rect", {class: "glow", x: -10, y: -26, width: 112, height: 124, rx: 30, fill: "var(--accent-soft)"}, bob);
+    el("line", {class: "ant", x1: 46, y1: 6, x2: 46, y2: -10}, bob);
+    el("circle", {cx: 46, cy: -13, r: 6.5, fill: col}, bob);
+    el("rect", {class: "body", x: 0, y: 6, width: 92, height: 80, rx: 24}, bob);
+    el("rect", {class: "face", x: 12, y: 18, width: 68, height: 42, rx: 13}, bob);
+    el("rect", {class: "eye", x: 28, y: 30, width: 9, height: 13, rx: 4.5}, bob);
+    el("rect", {class: "eye", x: 55, y: 30, width: 9, height: 13, rx: 4.5}, bob);
+    el("path", {class: "mouth", d: "M40 51 Q46 55 52 51"}, bob);
+    txt(bob, {x: 46, y: 78, "text-anchor": "middle", style: "font:600 11px 'JetBrains Mono',monospace;fill:var(--muted)"}, sym);
+    el("rect", {class: "feet", x: 22, y: 90, width: 16, height: 6, rx: 3}, g);
+    el("rect", {class: "feet", x: 54, y: 90, width: 16, height: 6, rx: 3}, g);
+    txt(s, {x: xs[i], y: 158, "text-anchor": "middle", class: "lab"}, name);
+    txt(s, {x: xs[i], y: 176, "text-anchor": "middle", class: "sub"}, model);
+    groups.push(g);
+  });
+  const card = el("g", {}, s);
+  card.style.transition = reduce ? "none" : "transform .9s ease";
+  el("rect", {x: 0, y: 0, width: 76, height: 28, rx: 7, fill: "var(--surface)", stroke: "var(--accent)", "stroke-width": 1.6}, card);
+  const ctext = txt(card, {x: 38, y: 19, "text-anchor": "middle", style: "font:600 11.5px 'JetBrains Mono',monospace;fill:var(--accent)"}, "issue");
+  const place = k => card.style.transform = `translate(${xs[k] - 38}px,207px)`;
+  const labels = ["issue", "plan", "edits", "verdict", "PR"];
+  if (reduce) { groups[2].classList.add("active"); place(2); ctext.textContent = "edits"; return; }
+  let k = 0; place(0);
+  const tick = () => {
+    groups.forEach(g => g.classList.remove("active"));
+    if (k < bots.length) { groups[k].classList.add("active"); place(k); ctext.textContent = labels[k]; k++; setTimeout(tick, 1500); }
+    else { ctext.textContent = "merged ✓"; k = 0; setTimeout(tick, 2200); }
+  };
+  tick();
+})();
+
+/* cost per agent, from data.js */
 (() => {
   const s = document.getElementById("roles"), roles = M.by_role || {};
   const order = ["architect", "qa", "developer", "analyst", "docs"], names = {architect: "Architect · Opus", qa: "QA · Opus", developer: "Developer · Sonnet", analyst: "Analyst · Haiku", docs: "Docs · Haiku"};
-  const max = Math.max(...order.map(r => (roles[r] || {}).cost_usd || 0), 0.001), L = 170, R = 450;
+  const color = {architect: "var(--opus)", qa: "var(--opus)", developer: "var(--sonnet)", analyst: "var(--haiku)", docs: "var(--haiku)"};
+  const max = Math.max(...order.map(r => (roles[r] || {}).cost_usd || 0), 0.001), L = 160, R = 440;
   order.forEach((r, i) => {
-    const v = (roles[r] || {}).cost_usd || 0, y = 12 + i * 46, w = (R - L) * v / max;
+    const v = (roles[r] || {}).cost_usd || 0, y = 12 + i * 44, w = (R - L) * v / max;
     txt(s, {x: 0, y: y + 13, class: "lab"}, names[r]);
-    const b = el("rect", {x: L, y, height: 16, width: reduce ? Math.max(w, 1) : 0, fill: r === "architect" || r === "qa" ? "var(--bar1)" : "var(--bar0)", class: "bar"}, s); b.dataset.w = Math.max(w, 1);
-    txt(s, {x: L + Math.max(w, 1) + 8, y: y + 13, class: "val"}, "$" + v.toFixed(3));
+    const b = el("rect", {x: L, y, height: 18, rx: 4, width: reduce ? Math.max(w, 2) : 0, fill: color[r], class: "bar"}, s); b.dataset.w = Math.max(w, 2);
+    txt(s, {x: L + Math.max(w, 2) + 8, y: y + 13, class: "val"}, "$" + v.toFixed(3));
   });
 })();
 
+/* dashboard, from data.js */
 (() => {
   const prs = (M.prs || []).slice().sort((a, b) => a.number - b.number), tb = document.querySelector("#pr-table tbody");
   prs.forEach(p => {
@@ -301,30 +525,31 @@ const M = window.METRICS || {};
     const ok = checks.filter(c => c.conclusion === "SUCCESS").length;
     const h = p.state === "MERGED" ? ((new Date(p.mergedAt) - new Date(p.createdAt)) / 36e5) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="n"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/pull/${p.number}">#${p.number}</a></td><td></td><td>${ai ? '<span class="tag">ai-authored</span>' : ""}</td><td class="n">${ok} / ${checks.length}</td><td class="n">${h === null ? p.state.toLowerCase() : (h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h")}</td><td class="n">+${p.additions} −${p.deletions}</td>`;
+    tr.innerHTML = `<td class="n"><a href="https://github.com/dheepakkaran/agentic-sdlc-go/pull/${p.number}">#${p.number}</a></td><td></td><td>${ai ? '<span class="label">ai-authored</span>' : ""}</td><td class="n" style="color:var(--green)">✓ ${ok}/${checks.length}</td><td class="n">${h === null ? p.state.toLowerCase() : (h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h")}</td><td class="n">+${p.additions} −${p.deletions}</td>`;
     tr.children[1].textContent = p.title; tb.appendChild(tr);
   });
   const all = M.all_calls_total || {}, fin = M.harness_total || {}, n = (M.issues || []).length || 1;
   const stats = [
-    [`${M.ai_authored_merged || 0}/${M.merged_prs || 0}`, "merged PRs written by the harness (AI adoption)"],
-    ["$" + ((fin.cost_usd || 0) / n).toFixed(3), "model cost per merged issue"],
-    [((fin.output_tokens || 0) / n / 1000).toFixed(1) + "k", "output tokens per merged issue"],
-    ["$" + (all.cost_usd || 0).toFixed(2), `all ${all.calls || 0} model calls, experiments included`]];
-  document.getElementById("dash-stats").innerHTML = stats.map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+    [`${M.ai_authored_merged || 0}<small>/${M.merged_prs || 0}</small>`, "merged PRs written by the agents (AI adoption)"],
+    ["$" + ((fin.cost_usd || 0) / n).toFixed(2), "model cost per merged issue"],
+    [((fin.output_tokens || 0) / n / 1000).toFixed(1) + "<small>k</small>", "output tokens per merged issue"],
+    ["$" + (all.cost_usd || 0).toFixed(2), `all ${all.calls || 0} model calls, experiments and failures included`]];
+  document.getElementById("dash-stats").innerHTML = stats.map(([v, l]) => `<div class="card num"><div class="v">${v}</div><div class="l">${l}</div><div class="k">measured</div></div>`).join("");
 })();
 
 const io = new IntersectionObserver(es => es.forEach(e => {
   if (!e.isIntersecting) return; const t = e.target; t.classList.add("in");
   t.querySelectorAll(".bar").forEach(b => b.setAttribute("width", b.dataset.w));
   io.unobserve(t);
-}), {threshold: .15});
+}), {threshold: .12});
 document.querySelectorAll(".fade").forEach(e => io.observe(e));
 
-if (!reduce) document.querySelectorAll("[data-count]").forEach(n => {
-  const to = +n.dataset.count, dec = +(n.dataset.dec || 0), pre = n.dataset.prefix || "", suf = n.dataset.suffix || "", t0 = performance.now();
-  const f = now => { const p = Math.min(1, (now - t0) / 1100), v = to * (1 - Math.pow(1 - p, 3)); n.textContent = pre + v.toFixed(dec) + suf; if (p < 1) requestAnimationFrame(f); };
-  requestAnimationFrame(f);
-});
+const tabs = [...document.querySelectorAll(".tabs a")];
+const secs = tabs.map(a => document.querySelector(a.getAttribute("href")));
+addEventListener("scroll", () => {
+  let cur = 0; secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 160) cur = i; });
+  tabs.forEach((a, i) => a.classList.toggle("on", i === cur));
+}, {passive: true});
 </script>
 </body>
 </html>

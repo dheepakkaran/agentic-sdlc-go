@@ -18,6 +18,8 @@ The service is a network device inventory REST API (routers, switches, OLTs). It
 | Cheap analyst (Haiku) valid on first try | 6 / 9 in a small eval; with check + one Sonnet retry ≈ $0.005 per issue vs $0.013 for Sonnet alone |
 | Total spend, every experiment and failure included | **$2.13** over 77 model calls (`results/ledger.jsonl`) |
 
+**Against doing it by hand (small, well-scoped issues only):** about 7 minutes and $5.62 per issue (2 min of agents, measured; 5 min of human review, estimated) vs. about 1 hour and $65.38 for an engineer (1 hour is an assumption; pay = BLS median for U.S. software developers, $135,980 a year in May 2025 = $65.38/h, wage only). That is roughly 11× lower cost per issue. Three issues of 98–146 lines on a small service is not evidence for large or vague work; see the project page for the full breakdown and limits.
+
 The harness went through five versions (v1 → v3.3); every change came from the ledger. What broke and what changed: [FAILURES.md](FAILURES.md).
 
 ## How the harness saves tokens
