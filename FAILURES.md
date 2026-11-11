@@ -22,7 +22,7 @@ Every item is from a real run; numbers come from `results/ledger.jsonl` and `res
 
 ## 5. The docs agent named fields that do not exist
 **Seen:** PR #4 body says "Name, type, address, and ID are not modified"; the real fields are hostname, role, mgmt_ip. Low impact, but it is a hallucination in a PR description.
-**Open:** give the docs role the `Device` struct line from the repo map.
+**Changed:** the docs role now gets the struct lines from the repo map with "use these exact field names" (~60 tokens).
 
 ## 6. Kubernetes pods never became ready (CI)
 **Seen:** first CI run, `kubectl rollout status` timed out.
@@ -32,3 +32,14 @@ Every item is from a real run; numbers come from `results/ledger.jsonl` and `res
 ## 7. My own harness failed its own gates
 **Seen:** the first lint + security scan of the harness: golangci-lint 16 issues, gosec 35.
 **Changed:** errors handled everywhere, tighter file modes, agent file reads and writes through `os.Root` (cannot leave the worktree), CI git ref validated by a regex. 9 remaining gosec findings are justified with an inline `#nosec` reason (fixed tools run with arguments the harness builds, no shell).
+
+## 8. Is the cheap analyst worth it? (analyst eval)
+**Seen:** Haiku returned an empty answer on 2 of the first 4 pipeline runs. Instead of guessing, `cmd/analyst-eval` ran each config on all 3 issues and scored it with the same check the pipeline uses (`results/analyst_eval.json`):
+
+| Config | Valid | Cost per call |
+|---|---|---|
+| Haiku, effort low | 6 / 9 | ~$0.0005 |
+| Haiku, effort medium | 6 / 9 (all 3 fails on issue #3) | ~$0.0006 |
+| Sonnet, effort low | 3 / 3 | ~$0.013 |
+
+**Decision:** medium effort does not help, so Haiku stays at low. With the cascade the expected analyst cost is ~$0.0005 + ⅓ × $0.013 ≈ $0.005 per issue vs $0.013 for Sonnet alone, and every run still ends with valid requirements. 5 of the 6 Haiku failures were ~48-token placeholders; one was a 693-token answer that failed the check, whose text this first eval did not save (it saves answers now).

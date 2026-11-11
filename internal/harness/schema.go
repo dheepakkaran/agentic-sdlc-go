@@ -35,7 +35,7 @@ func (r Requirements) Valid() bool {
 	return len(s) >= 20 && !strings.Contains(s, "placeholder") && len(r.Requirements) >= 1 && len(r.AcceptanceCriteria) >= 2
 }
 
-var requirementsSchema = obj(map[string]any{"summary": str, "requirements": strList, "acceptance_criteria": strList, "assumptions": strList, "out_of_scope": strList})
+var RequirementsSchema = obj(map[string]any{"summary": str, "requirements": strList, "acceptance_criteria": strList, "assumptions": strList, "out_of_scope": strList})
 
 type Plan struct {
 	Approve      bool     `json:"approve"`

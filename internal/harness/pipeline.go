@@ -59,7 +59,7 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 
 	// 1. Analyst (cheap model, issue text only: no repo map needed).
 	p.Log("analyst   %s  → requirements", Routes[Analyst].Model)
-	if err := p.LLM.Ask(ctx, Analyst, "", "", prompts.Analyst, []Msg{{Text: issueText}}, requirementsSchema, 1, &r.Requirements); err != nil {
+	if err := p.LLM.Ask(ctx, Analyst, "", "", prompts.Analyst, []Msg{{Text: issueText}}, RequirementsSchema, 1, &r.Requirements); err != nil {
 		return r, err
 	}
 	if !r.Requirements.Valid() {
@@ -68,7 +68,7 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 		up := Routes[Analyst].Escalate
 		p.Log("analyst   output failed the check → escalate to %s", up)
 		r.Escalations = append(r.Escalations, "analyst→"+up)
-		if err := p.LLM.Ask(ctx, Analyst, up, "", prompts.Analyst, []Msg{{Text: issueText}}, requirementsSchema, 2, &r.Requirements); err != nil {
+		if err := p.LLM.Ask(ctx, Analyst, up, "", prompts.Analyst, []Msg{{Text: issueText}}, RequirementsSchema, 2, &r.Requirements); err != nil {
 			return r, err
 		}
 		if !r.Requirements.Valid() {
@@ -148,7 +148,10 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 	// 5. Docs (cheap model): PR text + changelog from the diffstat.
 	stat, _ := run(p.Dir, "git", "diff", "--stat")
 	p.Log("docs      %s  → PR body + changelog", Routes[Docs].Model)
-	if err := p.LLM.Ask(ctx, Docs, "", "", prompts.Docs, []Msg{{Text: issueText + "\n\n" + reqText + "\n\nDiffstat:\n" + stat}}, docsSchema, 1, &r.Docs); err != nil {
+	// The type lines from the repo map keep the docs agent from inventing
+	// field names (FAILURES.md #5); ~60 tokens.
+	types := typeLines(repoMap)
+	if err := p.LLM.Ask(ctx, Docs, "", "", prompts.Docs, []Msg{{Text: issueText + "\n\n" + reqText + "\n\nTypes (use these exact field names):\n" + types + "\nDiffstat:\n" + stat}}, docsSchema, 1, &r.Docs); err != nil {
 		return r, err
 	}
 	return r, nil
@@ -182,6 +185,16 @@ func RunNaive(ctx context.Context, l *LLM, dir string, srcDirs []string, is Issu
 	r.Attempts = [][]Gate{gs}
 	r.Passed = allOK(gs)
 	return r, nil
+}
+
+func typeLines(repoMap string) string {
+	var b strings.Builder
+	for _, l := range strings.Split(repoMap, "\n") {
+		if strings.HasPrefix(l, "- type ") && strings.Contains(l, "json:") {
+			b.WriteString(l + "\n")
+		}
+	}
+	return b.String()
 }
 
 // codeFindings keeps the QA findings the developer can act on: those on a
