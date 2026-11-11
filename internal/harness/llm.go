@@ -18,6 +18,7 @@ import (
 // hit rate are measured, not guessed.
 type Call struct {
 	Run        string  `json:"run"`
+	Version    string  `json:"harness_version"`
 	Issue      int     `json:"issue"`
 	Role       Role    `json:"role"`
 	Model      string  `json:"model"`
@@ -37,6 +38,7 @@ type Call struct {
 type LLM struct {
 	Client    anthropic.Client
 	Run       string
+	Version   string
 	Issue     int
 	BudgetUSD float64
 	Ledger    string // path to results/ledger.jsonl
@@ -55,8 +57,14 @@ type Msg struct {
 	Text      string
 }
 
-// Ask sends shared (cached) context + role prompt + turns and decodes the
-// JSON answer into out. schema is a JSON Schema for structured output.
+// Ask sends shared context + role prompt + turns and decodes the JSON answer
+// into out. schema is a JSON Schema for structured output.
+//
+// Caching (measured, see docs): the output schema is part of the cached
+// prefix, so different roles never share a cache entry. One breakpoint at
+// the end of the role's system prompt lets the same role reuse it on the
+// next issue and on retries. The conversation itself is cached only for
+// multi-turn calls (the developer's retry loop), where it is re-sent.
 func (l *LLM) Ask(ctx context.Context, role Role, model string, shared, rolePrompt string, turns []Msg, schema map[string]any, attempt int, out any) error {
 	r := Routes[role]
 	if model == "" {
@@ -69,9 +77,9 @@ func (l *LLM) Ask(ctx context.Context, role Role, model string, shared, roleProm
 	// repo map (identical for every role on the same model), then the role.
 	system := []anthropic.TextBlockParam{}
 	if shared != "" {
-		system = append(system, anthropic.TextBlockParam{Text: shared, CacheControl: anthropic.NewCacheControlEphemeralParam()})
+		system = append(system, anthropic.TextBlockParam{Text: shared})
 	}
-	system = append(system, anthropic.TextBlockParam{Text: rolePrompt})
+	system = append(system, anthropic.TextBlockParam{Text: rolePrompt, CacheControl: anthropic.NewCacheControlEphemeralParam()})
 
 	msgs := make([]anthropic.MessageParam, 0, len(turns))
 	for _, t := range turns {
@@ -82,15 +90,17 @@ func (l *LLM) Ask(ctx context.Context, role Role, model string, shared, roleProm
 		}
 	}
 	params := anthropic.MessageNewParams{
-		Model:        model,
-		MaxTokens:    r.MaxTokens,
-		System:       system,
-		Messages:     msgs,
-		CacheControl: anthropic.NewCacheControlEphemeralParam(), // auto breakpoint on the last turn (retry loop)
+		Model:     model,
+		MaxTokens: r.MaxTokens,
+		System:    system,
+		Messages:  msgs,
 		OutputConfig: anthropic.OutputConfigParam{
 			Effort: r.Effort,
 			Format: anthropic.JSONOutputFormatParam{Schema: schema},
 		},
+	}
+	if len(turns) > 1 {
+		params.CacheControl = anthropic.NewCacheControlEphemeralParam() // retry loop: cache the growing conversation
 	}
 	start := time.Now()
 	stream := l.Client.Messages.NewStreaming(ctx, params)
@@ -104,7 +114,7 @@ func (l *LLM) Ask(ctx context.Context, role Role, model string, shared, roleProm
 		return fmt.Errorf("%s on %s: %w", role, model, err)
 	}
 	u := resp.Usage
-	c := Call{Run: l.Run, Issue: l.Issue, Role: role, Model: model, Attempt: attempt,
+	c := Call{Run: l.Run, Version: l.Version, Issue: l.Issue, Role: role, Model: model, Attempt: attempt,
 		Input: u.InputTokens, Output: u.OutputTokens, CacheRead: u.CacheReadInputTokens, CacheWrite: u.CacheCreationInputTokens,
 		Seconds: time.Since(start).Seconds(), Stop: string(resp.StopReason), Time: time.Now().UTC().Format(time.RFC3339)}
 	c.CostUSD = cost(model, c.Input, c.Output, c.CacheRead, c.CacheWrite)

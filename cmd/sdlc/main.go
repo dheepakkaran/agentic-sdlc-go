@@ -50,7 +50,7 @@ func main() {
 	is := fetchIssue(*num)
 	ctx := context.Background()
 	runID := fmt.Sprintf("%s-%d-%s", os.Args[1], is.Number, time.Now().UTC().Format("20060102T150405"))
-	llm := &harness.LLM{Client: anthropic.NewClient(), Run: runID, Issue: is.Number, BudgetUSD: *budget, Ledger: "results/ledger.jsonl"}
+	llm := &harness.LLM{Client: anthropic.NewClient(), Run: runID, Version: harness.Version, Issue: is.Number, BudgetUSD: *budget, Ledger: "results/ledger.jsonl"}
 	logf := func(f string, a ...any) { fmt.Printf("  "+f+"\n", a...) }
 
 	if os.Args[1] == "naive" {

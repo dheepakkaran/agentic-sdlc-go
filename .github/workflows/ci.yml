@@ -68,6 +68,9 @@ jobs:
           curl -fsS localhost:8080/health
           curl -fsS -XPOST localhost:8080/devices -d '{"id":"r1","hostname":"core-r1"}'
           curl -fsS localhost:8080/devices/r1
+      - name: pod events (on failure)
+        if: failure()
+        run: kubectl describe pods -l app=inventory | tail -40
 
   release-readiness:
     runs-on: ubuntu-latest

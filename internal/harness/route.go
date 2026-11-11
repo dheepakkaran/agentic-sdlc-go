@@ -5,6 +5,11 @@ package harness
 
 import "github.com/anthropics/anthropic-sdk-go/v2"
 
+// Version tags every ledger row, so harness changes are compared on data.
+// v1: whole-file developer output, cache breakpoint on every call.
+// v2: edit-based developer output, cache only where it is reused.
+const Version = "v2"
+
 // Role is one step of the AI-SDLC flow.
 type Role string
 

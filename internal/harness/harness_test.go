@@ -79,3 +79,25 @@ func TestWriteInRootBlocksEscape(t *testing.T) {
 		t.Errorf("ReadFiles: %q", got)
 	}
 }
+
+func TestApplyChange(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeInRoot(dir, File{Path: "a.go", Content: "package a\n\nfunc A() {}\n\nfunc B() {}\n"}); err != nil {
+		t.Fatal(err)
+	}
+	allowed := []string{"a.go", "a_test.go"}
+	ch := Change{
+		Edits:    []Edit{{Path: "a.go", Old: "func A() {}", New: "func A() int { return 1 }"}, {Path: "a.go", Old: "func", New: "x"}},
+		NewFiles: []File{{Path: "a_test.go", Content: "package a"}, {Path: "b.go", Content: "package a"}},
+	}
+	changed, problems := applyChange(dir, ch, allowed)
+	if strings.Join(changed, ",") != "a.go,a_test.go" {
+		t.Errorf("changed: %v", changed)
+	}
+	if len(problems) != 2 || !strings.Contains(problems[0], "found 2 times") || !strings.Contains(problems[1], "not in the architect's plan") {
+		t.Errorf("problems: %v", problems)
+	}
+	if got := ReadFiles(dir, []string{"a.go"}); !strings.Contains(got, "return 1") {
+		t.Errorf("edit not applied: %s", got)
+	}
+}

@@ -11,7 +11,7 @@ spec:
     metadata:
       labels: {app: inventory}
     spec:
-      securityContext: {runAsNonRoot: true}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
       containers:
         - name: inventory
           image: inventory:ci

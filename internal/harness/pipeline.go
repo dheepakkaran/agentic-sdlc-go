@@ -88,18 +88,8 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 		if err := p.LLM.Ask(ctx, Developer, model, shared, prompts.Developer, turns, changeSchema, attempt, &ch); err != nil {
 			return r, err
 		}
-		var guardErr []string
-		for _, f := range ch.Files {
-			if err := CheckWrite(f.Path, f.Content, allowed); err != nil {
-				guardErr = append(guardErr, err.Error())
-				continue
-			}
-			if err := writeInRoot(p.Dir, f); err != nil {
-				guardErr = append(guardErr, err.Error())
-				continue
-			}
-			r.Changed = uniq(append(r.Changed, f.Path))
-		}
+		changed, guardErr := applyChange(p.Dir, ch, allowed)
+		r.Changed = uniq(append(r.Changed, changed...))
 		gs := LocalGates(p.Dir)
 		if len(guardErr) > 0 {
 			gs = append(gs, Gate{"guardrails", false, strings.Join(guardErr, "\n")})
@@ -154,8 +144,8 @@ func RunNaive(ctx context.Context, l *LLM, dir string, srcDirs []string, is Issu
 		}
 	}
 	msg := fmt.Sprintf("Repository:\n%s\n\nIssue #%d: %s\n\n%s", ReadFiles(dir, all), is.Number, is.Title, is.Body)
-	var ch Change
-	if err := l.Ask(ctx, Naive, "", "", prompts.Naive, []Msg{{Text: msg}}, changeSchema, 1, &ch); err != nil {
+	var ch FullChange
+	if err := l.Ask(ctx, Naive, "", "", prompts.Naive, []Msg{{Text: msg}}, fullChangeSchema, 1, &ch); err != nil {
 		return r, err
 	}
 	for _, f := range ch.Files {
@@ -168,6 +158,51 @@ func RunNaive(ctx context.Context, l *LLM, dir string, srcDirs []string, is Issu
 	r.Attempts = [][]Gate{gs}
 	r.Passed = allOK(gs)
 	return r, nil
+}
+
+// applyChange applies edits and new files after the guardrails. Problems
+// (guardrail, an old snippet that is missing or not unique) are returned as
+// feedback for the developer instead of aborting the run.
+func applyChange(dir string, ch Change, allowed []string) (changed, problems []string) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, []string{err.Error()}
+	}
+	defer func() { _ = root.Close() }()
+	for _, e := range ch.Edits {
+		data, err := root.ReadFile(e.Path)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("edit %s: file not found (use new_files for new files)", e.Path))
+			continue
+		}
+		src := string(data)
+		if n := strings.Count(src, e.Old); n != 1 || e.Old == "" {
+			problems = append(problems, fmt.Sprintf("edit %s: old snippet found %d times, it must match exactly once", e.Path, n))
+			continue
+		}
+		next := strings.Replace(src, e.Old, e.New, 1)
+		if err := CheckWrite(e.Path, next, allowed); err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		if err := root.WriteFile(e.Path, []byte(next), 0o600); err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		changed = append(changed, e.Path)
+	}
+	for _, f := range ch.NewFiles {
+		if err := CheckWrite(f.Path, f.Content, allowed); err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		if err := writeInRoot(dir, f); err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		changed = append(changed, f.Path)
+	}
+	return changed, problems
 }
 
 // writeInRoot writes a model-produced file through os.Root, so the write

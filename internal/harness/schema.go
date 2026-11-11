@@ -45,12 +45,34 @@ type File struct {
 	Content string `json:"content"`
 }
 
+// Edit replaces one exact snippet in an existing file. Old must occur
+// exactly once. Sending edits instead of whole files is the biggest output
+// token saving in the harness.
+type Edit struct {
+	Path string `json:"path"`
+	Old  string `json:"old"`
+	New  string `json:"new"`
+}
+
 type Change struct {
+	Edits    []Edit `json:"edits"`
+	NewFiles []File `json:"new_files"`
+	Notes    string `json:"notes"`
+}
+
+var changeSchema = obj(map[string]any{
+	"edits":     map[string]any{"type": "array", "items": obj(map[string]any{"path": str, "old": str, "new": str})},
+	"new_files": fileArr,
+	"notes":     str,
+})
+
+// FullChange is the naive baseline's format: whole files.
+type FullChange struct {
 	Files []File `json:"files"`
 	Notes string `json:"notes"`
 }
 
-var changeSchema = obj(map[string]any{"files": fileArr, "notes": str})
+var fullChangeSchema = obj(map[string]any{"files": fileArr, "notes": str})
 
 type Finding struct {
 	File     string `json:"file"`
