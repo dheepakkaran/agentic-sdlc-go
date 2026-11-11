@@ -37,6 +37,10 @@ Every item is from a real run; numbers come from `results/ledger.jsonl` and `res
 **Seen:** PR #5 (issue #2): gofmt, vet and tests passed inside the harness and QA approved, but CI's golangci-lint failed (`buf.ReadFrom` error not checked in a test), so release readiness blocked the PR. The gates worked; the harness was checking less than CI.
 **Changed (v3.1):** the same golangci-lint runs in the harness's local gates, so the developer fixes lint inside its retry loop. A re-run replaces the agent branch and updates the open PR.
 
+## 10. I broke main, and the agent paid for it
+**Seen:** issue #2 re-run (v3.1): gofmt failed on all 3 developer attempts, including the escalated Opus one ($0.19 spent). The cause was mine: I committed `internal/harness/route.go` without formatting it, every worktree inherited it, and the developer may not touch harness files. `gofmt -l` prints names but exits 0, so my own check chain did not stop.
+**Changed:** the file is formatted, and the harness now runs a **preflight**: the gates run on the clean base before any model call; a broken base stops the run at $0 with "fix main first".
+
 ## 8. Is the cheap analyst worth it? (analyst eval)
 **Seen:** Haiku returned an empty answer on 2 of the first 4 pipeline runs. Instead of guessing, `cmd/analyst-eval` ran each config on all 3 issues and scored it with the same check the pipeline uses (`results/analyst_eval.json`):
 

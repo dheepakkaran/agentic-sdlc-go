@@ -12,6 +12,7 @@ import "github.com/anthropics/anthropic-sdk-go/v2"
 //
 //	developer escalates only after a gate failure; QA sends back only
 //	findings on planned code files.
+//
 // v3.1: golangci-lint added to the local gates (shift-left).
 const Version = "v3.1"
 

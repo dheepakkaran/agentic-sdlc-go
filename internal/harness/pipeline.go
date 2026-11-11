@@ -50,6 +50,15 @@ func js(v any) string { b, _ := json.MarshalIndent(v, "", " "); return string(b)
 func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 	r := &Result{Issue: is}
 	defer func() { r.CostUSD = p.LLM.Spent(); r.Calls = p.LLM.Calls }()
+	// Preflight: the base must pass the gates before any tokens are spent.
+	// Otherwise the developer is asked to fix failures it is not allowed to
+	// touch (FAILURES.md #10).
+	if gs := LocalGates(p.Dir); !allOK(gs) {
+		p.Log("preflight %s", gateLine(gs))
+		r.Attempts = append(r.Attempts, gs)
+		r.Stopped = "base branch fails the gates before any change: fix main first"
+		return r, nil
+	}
 	repoMap, err := RepoMap(p.Dir, p.MapDirs)
 	if err != nil {
 		return r, err
