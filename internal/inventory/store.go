@@ -77,11 +77,19 @@ func (s *Store) Get(id string) (Device, error) {
 
 // List returns all devices sorted by ID.
 func (s *Store) List() []Device {
+	return s.ListFiltered("", "")
+}
+
+// ListFiltered returns devices sorted by ID. An empty site or role means no
+// filter on that field. Matching is exact and case-sensitive.
+func (s *Store) ListFiltered(site, role string) []Device {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]Device, 0, len(s.devices))
 	for _, d := range s.devices {
-		out = append(out, d)
+		if (site == "" || d.Site == site) && (role == "" || d.Role == role) {
+			out = append(out, d)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
