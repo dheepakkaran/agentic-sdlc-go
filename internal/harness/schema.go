@@ -1,6 +1,9 @@
 package harness
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // JSON Schemas for structured output. Every role answers in a fixed shape,
 // so no tokens go to prose and the harness never parses free text.
@@ -105,6 +108,13 @@ type DocsOut struct {
 	PRBody    string   `json:"pr_body"`
 	Changelog string   `json:"changelog_entry"`
 	APIDocs   []string `json:"api_docs"`
+}
+
+// Valid is the deterministic check on the cheap docs agent's output
+// (FAILURES.md #11: Haiku once returned every field empty).
+func (d DocsOut) Valid(issue int) bool {
+	return len(strings.TrimSpace(d.PRTitle)) >= 10 && len(d.PRBody) >= 80 &&
+		strings.Contains(d.PRBody, fmt.Sprintf("#%d", issue)) && len(strings.TrimSpace(d.Changelog)) >= 10
 }
 
 var docsSchema = obj(map[string]any{"pr_title": str, "pr_body": str, "changelog_entry": str, "api_docs": strList})

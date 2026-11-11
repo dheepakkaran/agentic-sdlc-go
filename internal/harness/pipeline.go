@@ -155,15 +155,44 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 		return r, nil
 	}
 	// 5. Docs (cheap model): PR text + changelog from the diffstat.
-	stat, _ := run(p.Dir, "git", "diff", "--stat")
-	p.Log("docs      %s  → PR body + changelog", Routes[Docs].Model)
-	// The type lines from the repo map keep the docs agent from inventing
-	// field names (FAILURES.md #5); ~60 tokens.
-	types := typeLines(repoMap)
-	if err := p.LLM.Ask(ctx, Docs, "", "", prompts.Docs, []Msg{{Text: issueText + "\n\n" + reqText + "\n\nTypes (use these exact field names):\n" + types + "\nDiffstat:\n" + stat}}, docsSchema, 1, &r.Docs); err != nil {
-		return r, err
+	return r, p.Document(ctx, r, "diff")
+}
+
+// Document runs the docs role (cheap model, cascade on a failed check). It
+// is separate so `sdlc redoc` can redo only this step on an existing branch.
+// base is what to diff against: "diff" for the working tree, or a commit.
+func (p *Pipeline) Document(ctx context.Context, r *Result, base string) error {
+	args := []string{"diff", "--stat"}
+	if base != "diff" {
+		args = append(args, base)
 	}
-	return r, nil
+	stat, _ := run(p.Dir, "git", args...)
+	repoMap, err := RepoMap(p.Dir, p.MapDirs)
+	if err != nil {
+		return err
+	}
+	is := r.Issue
+	issueText := fmt.Sprintf("Issue #%d: %s\n\n%s", is.Number, is.Title, is.Body)
+	// The type lines keep the docs agent from inventing field names
+	// (FAILURES.md #5); ~60 tokens.
+	msg := []Msg{{Text: issueText + "\n\nRequirements:\n" + js(r.Requirements) + "\n\nTypes (use these exact field names):\n" + typeLines(repoMap) + "\nDiffstat:\n" + stat}}
+	p.Log("docs      %s  → PR body + changelog", Routes[Docs].Model)
+	if err := p.LLM.Ask(ctx, Docs, "", "", prompts.Docs, msg, docsSchema, 1, &r.Docs); err != nil {
+		return err
+	}
+	if !r.Docs.Valid(is.Number) {
+		up := Routes[Docs].Escalate
+		p.Log("docs      output failed the check → escalate to %s", up)
+		r.Escalations = append(r.Escalations, "docs→"+up)
+		if err := p.LLM.Ask(ctx, Docs, up, "", prompts.Docs, msg, docsSchema, 2, &r.Docs); err != nil {
+			return err
+		}
+		if !r.Docs.Valid(is.Number) {
+			r.Stopped = "PR text still incomplete: needs a human"
+			r.Approved = false
+		}
+	}
+	return nil
 }
 
 // RunNaive is the baseline: one strong-model call with the whole repo.

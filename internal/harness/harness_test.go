@@ -121,3 +121,14 @@ func TestCodeFindings(t *testing.T) {
 		t.Errorf("codeFindings: %+v", got)
 	}
 }
+
+func TestDocsValid(t *testing.T) {
+	empty := DocsOut{} // the exact Haiku output on PR #5
+	if empty.Valid(2) {
+		t.Error("empty docs must fail the check")
+	}
+	good := DocsOut{PRTitle: "feat: filter devices", PRBody: strings.Repeat("Adds site and role filters. ", 4) + "Closes #2", Changelog: "Filter GET /devices by site and role"}
+	if !good.Valid(2) || good.Valid(3) {
+		t.Error("docs check must pass good output and require the issue link")
+	}
+}

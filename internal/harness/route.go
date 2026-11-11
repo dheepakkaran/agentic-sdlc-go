@@ -14,7 +14,8 @@ import "github.com/anthropics/anthropic-sdk-go/v2"
 //	findings on planned code files.
 //
 // v3.1: golangci-lint added to the local gates (shift-left).
-const Version = "v3.1"
+// v3.2: docs output checked and escalated like the analyst.
+const Version = "v3.2"
 
 // Role is one step of the AI-SDLC flow.
 type Role string

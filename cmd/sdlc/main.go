@@ -2,6 +2,7 @@
 //
 //	sdlc run   -issue 3 [-pr]   analyst → architect → developer ⇄ gates → QA → docs → PR
 //	sdlc publish -issue 3       open the PR for an approved run without re-running it
+//	sdlc redoc -issue 3         redo only the docs step on the agent branch and update the PR
 //	sdlc naive -issue 3         baseline: one strong-model call with the whole repo
 //	sdlc map                    print the repo map the agents see
 package main
@@ -44,7 +45,7 @@ func main() {
 		must(err)
 		fmt.Print(m)
 		return
-	case "run", "naive", "publish":
+	case "run", "naive", "publish", "redoc":
 	default:
 		fmt.Fprintln(os.Stderr, "unknown command", os.Args[1])
 		os.Exit(2)
@@ -86,6 +87,10 @@ func main() {
 		publish(&r, is, branch, filepath.Join(".work", fmt.Sprintf("issue-%d", is.Number)), r.Calls[0].Run)
 		return
 	}
+	if os.Args[1] == "redoc" {
+		redoc(ctx, llm, is, branch, logf)
+		return
+	}
 	wt := fmt.Sprintf(".work/issue-%d", is.Number)
 	if *route == "opus" {
 		branch, wt = fmt.Sprintf("ai/opus-issue-%d", is.Number), fmt.Sprintf(".work/opus-issue-%d", is.Number)
@@ -105,6 +110,34 @@ func main() {
 	if *pr {
 		publish(r, is, branch, dir, runID)
 	}
+}
+
+// redoc re-runs only the docs role on the existing agent branch, adds the
+// changelog entry as a new commit and updates the open PR.
+func redoc(ctx context.Context, llm *harness.LLM, is harness.Issue, branch string, logf func(string, ...any)) {
+	path := fmt.Sprintf("results/runs/issue-%d.json", is.Number)
+	var r harness.Result
+	b, err := os.ReadFile(filepath.Clean(path))
+	must(err)
+	must(json.Unmarshal(b, &r))
+	dir, _ := filepath.Abs(filepath.Join(".work", fmt.Sprintf("issue-%d", is.Number)))
+	base := strings.TrimSpace(sh(dir, "git", "merge-base", "HEAD", "origin/main"))
+	p := &harness.Pipeline{LLM: llm, Dir: dir, MapDirs: mapDirs, Log: logf}
+	r.Stopped = ""
+	must(p.Document(ctx, &r, base))
+	r.Calls = append(r.Calls, llm.Calls...)
+	r.CostUSD += llm.Spent()
+	save(path, &r)
+	if r.Stopped != "" {
+		fmt.Println("  ", r.Stopped)
+		return
+	}
+	appendFile(filepath.Join(dir, "CHANGELOG.md"), "- "+strings.TrimPrefix(r.Docs.Changelog, "- ")+" (#"+fmt.Sprint(is.Number)+")\n")
+	sh(dir, "git", "add", "CHANGELOG.md")
+	sh(dir, "git", "commit", "-q", "-m", "docs: changelog for #"+fmt.Sprint(is.Number)+"\n\nAI-Assisted: sdlc-harness (docs re-run)")
+	sh(dir, "git", "push", "-q", "origin", branch)
+	sh(dir, "gh", "pr", "edit", branch, "--title", r.Docs.PRTitle, "--body", r.Docs.PRBody+fmt.Sprintf("\n\n---\nDocs re-run after the release gate blocked an empty changelog · total cost $%.4f · ledger in `results/ledger.jsonl`", r.CostUSD))
+	fmt.Printf("  PR updated · docs cost $%.4f\n", llm.Spent())
 }
 
 // publish commits an approved run on its branch, pushes it and opens the PR.
