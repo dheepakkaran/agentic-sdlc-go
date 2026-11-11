@@ -1,0 +1,307 @@
+{
+  "issue": {
+    "number": 1,
+    "title": "Set a device's status (up/down) without re-creating it",
+    "body": "Operators need to mark a router or switch down during maintenance and back up after, without deleting and re-creating it.\n\nAdd an endpoint that changes only the status of an existing device. It should reject unknown devices and any status other than up or down, and update the device's updated_at time."
+  },
+  "requirements": {
+    "summary": "placeholder",
+    "requirements": [],
+    "acceptance_criteria": [],
+    "assumptions": [],
+    "out_of_scope": []
+  },
+  "plan": {
+    "approve": true,
+    "reason": "The requirements JSON is an empty placeholder, so the plan comes from the issue text, which is clear and consistent. Standard library only. No auth, CI or dependency changes. Small store method plus one thin handler.",
+    "files_to_read": [
+      "internal/inventory/store.go",
+      "internal/inventory/http.go",
+      "internal/inventory/inventory_test.go"
+    ],
+    "files_to_write": [
+      "internal/inventory/store.go",
+      "internal/inventory/http.go",
+      "internal/inventory/inventory_test.go"
+    ],
+    "steps": [
+      "Read store.go and confirm Device has an UpdatedAt (updated_at) field and that Store.now is used for timestamps. If the field is missing, add `UpdatedAt time.Time json:\"updated_at\"` and set it in Create.",
+      "In store.go, add func (s *Store) SetStatus(id, status string) (Device, error). Return ErrInvalid unless status is exactly \"up\" or \"down\". Under the write lock, return ErrNotFound if id is unknown. Otherwise set Status, set UpdatedAt = s.now(), save and return the device. Change no other field.",
+      "In http.go, register PATCH /devices/{id}/status. Decode the body {\"status\":\"...\"} with a size limit and DisallowUnknownFields. Malformed JSON returns 400 via writeErr. Call s.SetStatus, map errors via status(err), and return 200 with the updated device. Update the Handler doc comment.",
+      "Do not add error-mapping code outside status(). Make no other refactors.",
+      "Run gofmt, go vet and go test ./..."
+    ],
+    "test_plan": [
+      "Table-driven TestStoreSetStatus covering: existing device to down, then to up (status changes; UpdatedAt equals the injected s.now and is later than CreatedAt); unknown id returns ErrNotFound; status \"\", \"UP\", \"maintenance\" each return ErrInvalid; other fields are unchanged.",
+      "Table-driven TestHTTPSetStatus with httptest covering: PATCH valid returns 200 with the new status and updated_at in the body; unknown id returns 404; invalid status returns 400; malformed JSON returns 400; unknown body field returns 400; GET afterwards reflects the new status.",
+      "Confirm the existing tests still pass."
+    ],
+    "risk": "low"
+  },
+  "attempts": [
+    [
+      {
+        "name": "gofmt",
+        "ok": false,
+        "out": "internal/inventory/http.go:17:2: expected declaration, found mux\ninternal/inventory/http.go:26:3: expected declaration, found 'if'\ninternal/inventory/http.go:56:3: expected declaration, found dec"
+      },
+      {
+        "name": "go vet",
+        "ok": false,
+        "out": "# github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory\n# [github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory]\nvet: internal/inventory/http.go:17:2: expected declaration, found mux (and 2 more errors)\n# github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory\ninternal/inventory/http.go:17:2: syntax error: non-declaration statement outside function body\ninternal/inventory/http.go:18:77: method has multiple receivers\ninternal/inventory/http.go:18:77: syntax error: unexpected {, expected name\ninternal/inventory/http.go:20:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:21:78: method has multiple receivers\ninternal/inventory/http.go:21:78: syntax error: unexpected {, expected name\ninternal/inventory/http.go:23:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:24:79: method has multiple receivers\ninternal/inventory/http.go:24:79: syntax error: unexpected {, expected name\ninternal/inventory/http.go:36:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:36:3: too many errors"
+      },
+      {
+        "name": "go test -race",
+        "ok": false,
+        "out": "# github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory\ninternal/inventory/http.go:17:2: syntax error: non-declaration statement outside function body\ninternal/inventory/http.go:18:77: method has multiple receivers\ninternal/inventory/http.go:18:77: syntax error: unexpected {, expected name\ninternal/inventory/http.go:20:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:21:78: method has multiple receivers\ninternal/inventory/http.go:21:78: syntax error: unexpected {, expected name\ninternal/inventory/http.go:23:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:24:79: method has multiple receivers\ninternal/inventory/http.go:24:79: syntax error: unexpected {, expected name\ninternal/inventory/http.go:36:3: syntax error: unexpected ) after top level declaration\ninternal/inventory/http.go:36:3: too many errors\nFAIL\tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/inventory [build failed]\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/metrics\t[no test files]\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/release-ready\t1.022s\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/sdlc\t[no test files]\n--- FAIL: TestRepoMap (0.00s)\n    guard_test.go:32: ../../internal/inventory/http.go:17:2: expected declaration, found mux (and 2 more errors)\nFAIL\nFAIL\tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness\t0.025s\nFAIL\tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory [build failed]\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/prompts\t[no test files]\nFAIL"
+      }
+    ],
+    [
+      {
+        "name": "gofmt",
+        "ok": true
+      },
+      {
+        "name": "go vet",
+        "ok": true
+      },
+      {
+        "name": "go test -race",
+        "ok": true,
+        "out": "?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/inventory\t[no test files]\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/metrics\t[no test files]\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/release-ready\t1.021s\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/sdlc\t[no test files]\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness\t1.035s\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory\t1.048s\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/prompts\t[no test files]"
+      }
+    ],
+    [
+      {
+        "name": "gofmt",
+        "ok": true
+      },
+      {
+        "name": "go vet",
+        "ok": true
+      },
+      {
+        "name": "go test -race",
+        "ok": true,
+        "out": "?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/inventory\t[no test files]\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/metrics\t[no test files]\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/release-ready\t1.018s\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/cmd/sdlc\t[no test files]\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness\t1.047s\nok  \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/internal/inventory\t1.077s\n?   \tgithub.com/dheepakkaran/go-ai-sdlc-pipeline/prompts\t[no test files]"
+      }
+    ]
+  ],
+  "developer_models": [
+    "claude-sonnet-5-5",
+    "claude-sonnet-5-5",
+    "claude-opus-5-5"
+  ],
+  "reviews": [
+    {
+      "verdict": "changes",
+      "findings": [
+        {
+          "file": "(requirements)",
+          "severity": "high",
+          "issue": "Requirements are a placeholder with no acceptance criteria. The new PATCH /devices/{id}/status endpoint cannot be traced to an issue, so scope and correctness cannot be verified.",
+          "fix": "Provide the real issue spec with acceptance criteria (allowed statuses, response codes, UpdatedAt semantics) and re-run review against it."
+        },
+        {
+          "file": "internal/inventory/store.go",
+          "severity": "low",
+          "issue": "SetStatus hardcodes \"up\"/\"down\". If validate() already defines allowed statuses, the two lists can drift.",
+          "fix": "Reuse the existing status check from validate (or a shared allowed-status set) instead of hardcoding \"up\"/\"down\"."
+        },
+        {
+          "file": "internal/inventory/http.go",
+          "severity": "low",
+          "issue": "A body like {\"status\":\"up\"}garbage is accepted because trailing data after the first JSON value is not rejected.",
+          "fix": "After Decode, reject trailing data, e.g. check that dec.More() is false or that a second Decode returns io.EOF. Return 400 otherwise."
+        },
+        {
+          "file": "internal/inventory/inventory_test.go",
+          "severity": "low",
+          "issue": "TestHTTPSetStatus never closes the response bodies from the create POST and the final GET. There is also no HTTP case for an empty or missing status.",
+          "fix": "Close res.Body after the create and final GET. Add an HTTP case for {} (missing status) expecting 400."
+        },
+        {
+          "file": "internal/inventory/inventory_test.go",
+          "severity": "low",
+          "issue": "HTTP subtests share one store and depend on order: the final GET relies on the \"valid\" case having run first.",
+          "fix": "Create the device per subtest, or document the ordering dependency."
+        }
+      ]
+    },
+    {
+      "verdict": "changes",
+      "findings": [
+        {
+          "file": "(requirements)",
+          "severity": "high",
+          "issue": "Requirements are a placeholder: there are no requirements and no acceptance criteria. The new PATCH /devices/{id}/status endpoint cannot be traced to a request, so it may be an unrequested change.",
+          "fix": "Provide real requirements and acceptance criteria for the PATCH status endpoint, then re-run the review."
+        },
+        {
+          "file": "internal/inventory/http.go",
+          "severity": "low",
+          "issue": "Store validates status before checking existence, so an unknown id with an invalid status returns 400, not 404. This is reasonable, but neither the spec nor a test covers it.",
+          "fix": "Confirm the intended precedence in the spec. If 404 should win, look up the device before validating the status."
+        },
+        {
+          "file": "internal/inventory/http.go",
+          "severity": "low",
+          "issue": "A body over 64KiB returns 400 'bad json' instead of 413.",
+          "fix": "Optional: detect *http.MaxBytesError and return 413. Add a test case if the spec requires it."
+        },
+        {
+          "file": "internal/inventory/inventory_test.go",
+          "severity": "low",
+          "issue": "The sentinel comparison uses err != tc.want. This works today but breaks if errors get wrapped later.",
+          "fix": "Use errors.Is(err, tc.want), or handle the nil case explicitly."
+        }
+      ]
+    }
+  ],
+  "docs": {
+    "pr_title": "feat(inventory): add endpoint to set device status up/down",
+    "pr_body": "## What changed\nAdds a `PATCH /devices/{id}/status` endpoint that updates only the status of an existing device and refreshes its `updated_at` timestamp. Requests with an unknown device ID return 404; any status other than `up` or `down` returns 400.\n\n## Why\nOperators need to take a router or switch down for maintenance and bring it back up afterward. Deleting and re-creating the device to do this loses its identity and history, so a status-only update is needed.\n\n## How it was tested\nAdded tests in `internal/inventory/inventory_test.go` covering successful up/down transitions, rejection of invalid status values, 404 for unknown devices, and `updated_at` being advanced. Changes touch `http.go` (handler and route) and `store.go` (status update logic).\n\nCloses #1",
+    "changelog_entry": "Add PATCH /devices/{id}/status endpoint to set a device's status to up or down without re-creating it (closes #1).",
+    "api_docs": [
+      "PATCH /devices/{id}/status — Set the status of an existing device without re-creating it. Request body: {\"status\": \"up\" | \"down\"}. Responses: 200 OK with the updated device (updated_at refreshed); 400 Bad Request if status is anything other than \"up\" or \"down\"; 404 Not Found if no device exists with the given id."
+    ]
+  },
+  "changed_files": [
+    "internal/inventory/store.go",
+    "internal/inventory/http.go",
+    "internal/inventory/inventory_test.go"
+  ],
+  "gates_passed": true,
+  "qa_approved": false,
+  "cost_usd": 0.33322070000000004,
+  "calls": [
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "analyst",
+      "model": "claude-haiku-5-5",
+      "attempt": 1,
+      "input_tokens": 589,
+      "output_tokens": 52,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0000849,
+      "seconds": 1.7117438919999999,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:48:36Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "architect",
+      "model": "claude-opus-5-5",
+      "attempt": 1,
+      "input_tokens": 179,
+      "output_tokens": 1257,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 1585,
+      "cost_usd": 0.033781,
+      "seconds": 12.96944901,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:48:49Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "developer",
+      "model": "claude-sonnet-5-5",
+      "attempt": 1,
+      "input_tokens": 4734,
+      "output_tokens": 3039,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 1615,
+      "cost_usd": 0.0438955,
+      "seconds": 17.1387854,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:49:06Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "developer",
+      "model": "claude-sonnet-5-5",
+      "attempt": 2,
+      "input_tokens": 4,
+      "output_tokens": 156,
+      "cache_read_tokens": 1615,
+      "cache_write_tokens": 9166,
+      "cost_usd": 0.0246445,
+      "seconds": 2.870144359,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:49:23Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "qa",
+      "model": "claude-opus-5-5",
+      "attempt": 1,
+      "input_tokens": 2858,
+      "output_tokens": 1276,
+      "cache_read_tokens": 1355,
+      "cache_write_tokens": 117,
+      "cost_usd": 0.037808,
+      "seconds": 13.819853775,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:49:41Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "developer",
+      "model": "claude-opus-5-5",
+      "attempt": 3,
+      "input_tokens": 4,
+      "output_tokens": 4949,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 11637,
+      "cost_usd": 0.157181,
+      "seconds": 36.389758268,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:50:17Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "qa",
+      "model": "claude-opus-5-5",
+      "attempt": 2,
+      "input_tokens": 3365,
+      "output_tokens": 1088,
+      "cache_read_tokens": 1472,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0355144,
+      "seconds": 12.147635052,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:50:34Z"
+    },
+    {
+      "run": "run-1-20261111T184834",
+      "harness_version": "v2",
+      "issue": 1,
+      "role": "docs",
+      "model": "claude-haiku-5-5",
+      "attempt": 1,
+      "input_tokens": 679,
+      "output_tokens": 487,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0003114,
+      "seconds": 3.096569246,
+      "stop_reason": "end_turn",
+      "time": "2026-11-11T18:50:37Z"
+    }
+  ]
+}

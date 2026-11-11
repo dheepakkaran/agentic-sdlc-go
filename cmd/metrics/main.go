@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"time"
 
 	"github.com/dheepakkaran/go-ai-sdlc-pipeline/internal/harness"
@@ -47,6 +46,8 @@ type issueRow struct {
 	HarnessPass  bool     `json:"harness_gates_passed"`
 	HarnessQA    bool     `json:"harness_qa_approved"`
 	NaivePass    bool     `json:"naive_gates_passed"`
+	AllOpus      agg      `json:"all_opus"`
+	AllOpusQA    bool     `json:"all_opus_qa_approved"`
 	DevModels    []string `json:"developer_models"`
 	DevAttempts  int      `json:"developer_attempts"`
 	QARounds     int      `json:"qa_rounds"`
@@ -72,52 +73,52 @@ type pr struct {
 
 func main() {
 	calls := readLedger("results/ledger.jsonl")
-	latest := map[string]string{} // latest run id per kind+issue, so reruns don't double count
-	for _, c := range calls {
-		k := fmt.Sprintf("%s-%d", kind(c.Run), c.Issue)
-		if c.Run > latest[k] {
-			latest[k] = c.Run
-		}
-	}
+	// Final run per issue = results/runs/issue-N.json (the run whose PR was
+	// merged; redoc calls are appended to it). Baselines have their own files.
 	byRole, byModel := map[string]*agg{}, map[string]*agg{}
-	harnessTot, naiveTot := agg{}, agg{}
-	rows := map[int]*issueRow{}
-	for _, c := range calls {
-		k := fmt.Sprintf("%s-%d", kind(c.Run), c.Issue)
-		if c.Run != latest[k] {
-			continue
-		}
-		row := rows[c.Issue]
-		if row == nil {
-			row = &issueRow{Issue: c.Issue}
-			rows[c.Issue] = row
-		}
-		if kind(c.Run) == "naive" {
-			row.Naive.add(c)
-			naiveTot.add(c)
-			continue
-		}
-		row.Harness.add(c)
-		harnessTot.add(c)
-		get(byRole, string(c.Role)).add(c)
-		get(byModel, c.Model).add(c)
-	}
-	for n, row := range rows {
+	harnessTot, naiveTot, opusTot := agg{}, agg{}, agg{}
+	var list []issueRow
+	for n := 1; n <= 50; n++ {
 		var r harness.Result
-		if readJSON(fmt.Sprintf("results/runs/issue-%d.json", n), &r) == nil {
-			row.Title, row.HarnessPass, row.HarnessQA = r.Issue.Title, r.Passed, r.Approved
-			row.DevModels, row.DevAttempts, row.QARounds, row.FilesChanged = r.DevModels, len(r.Attempts), len(r.Review), len(r.Changed)
+		if readJSON(fmt.Sprintf("results/runs/issue-%d.json", n), &r) != nil {
+			continue
+		}
+		row := issueRow{Issue: n, Title: r.Issue.Title, HarnessPass: r.Passed, HarnessQA: r.Approved,
+			DevModels: r.DevModels, DevAttempts: len(r.Attempts), QARounds: len(r.Review), FilesChanged: len(r.Changed)}
+		for _, c := range r.Calls {
+			row.Harness.add(c)
+			harnessTot.add(c)
+			get(byRole, string(c.Role)).add(c)
+			get(byModel, c.Model).add(c)
 		}
 		var nr harness.Result
 		if readJSON(fmt.Sprintf("results/runs/naive-%d.json", n), &nr) == nil {
 			row.NaivePass = nr.Passed
+			for _, c := range nr.Calls {
+				row.Naive.add(c)
+				naiveTot.add(c)
+			}
 		}
+		var or harness.Result
+		if readJSON(fmt.Sprintf("results/runs/issue-%d.all-opus.json", n), &or) == nil {
+			for _, c := range or.Calls {
+				row.AllOpus.add(c)
+				opusTot.add(c)
+			}
+			row.AllOpusQA = or.Approved
+		}
+		list = append(list, row)
 	}
-	var list []issueRow
-	for _, r := range rows {
-		list = append(list, *r)
+	byVersion := map[string]*agg{}
+	all := agg{}
+	for _, c := range calls {
+		v := c.Version
+		if v == "" {
+			v = "v1"
+		}
+		get(byVersion, v).add(c)
+		all.add(c)
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].Issue < list[j].Issue })
 
 	prs := githubPRs()
 	ai, merged, leadH := 0, 0, []float64{}
@@ -144,8 +145,11 @@ func main() {
 		"issues":             list,
 		"harness_total":      harnessTot,
 		"naive_total":        naiveTot,
+		"all_opus_total":     opusTot,
 		"by_role":            byRole,
 		"by_model":           byModel,
+		"by_version":         byVersion,
+		"all_calls_total":    all,
 		"cache_read_share":   cacheRate,
 		"merged_prs":         merged,
 		"ai_authored_merged": ai,
@@ -157,15 +161,8 @@ func main() {
 	must(os.WriteFile("results/metrics.json", b, 0o600))
 	must(os.MkdirAll("docs", 0o750))
 	must(os.WriteFile("docs/data.js", append([]byte("window.METRICS = "), append(b, ';', '\n')...), 0o600))
-	fmt.Printf("harness: %d calls $%.4f · naive: %d calls $%.4f · cache read share %.0f%% · AI-authored merged PRs %d/%d\n",
-		harnessTot.Calls, harnessTot.CostUSD, naiveTot.Calls, naiveTot.CostUSD, cacheRate*100, ai, merged)
-}
-
-func kind(run string) string {
-	if len(run) >= 5 && run[:5] == "naive" {
-		return "naive"
-	}
-	return "run"
+	fmt.Printf("final runs: %d issues $%.4f · all calls incl. experiments: %d $%.4f · cache read share %.1f%% · AI-authored merged PRs %d/%d\n",
+		len(list), harnessTot.CostUSD, all.Calls, all.CostUSD, cacheRate*100, ai, merged)
 }
 
 func get(m map[string]*agg, k string) *agg {

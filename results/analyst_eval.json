@@ -1,0 +1,192 @@
+{
+  "configs": [
+    {
+      "name": "haiku-low",
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "reps": 3
+    },
+    {
+      "name": "haiku-medium",
+      "model": "claude-haiku-5-5",
+      "effort": "medium",
+      "reps": 3
+    },
+    {
+      "name": "sonnet-low",
+      "model": "claude-sonnet-5-5",
+      "effort": "low",
+      "reps": 1
+    }
+  ],
+  "rows": [
+    {
+      "config": "haiku-low",
+      "issue": 1,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 949,
+      "cost_usd": 0.000536
+    },
+    {
+      "config": "haiku-low",
+      "issue": 1,
+      "rep": 2,
+      "valid": true,
+      "output_tokens": 942,
+      "cost_usd": 0.0005325
+    },
+    {
+      "config": "haiku-low",
+      "issue": 1,
+      "rep": 3,
+      "valid": true,
+      "output_tokens": 994,
+      "cost_usd": 0.0005585
+    },
+    {
+      "config": "haiku-low",
+      "issue": 2,
+      "rep": 1,
+      "valid": false,
+      "output_tokens": 49,
+      "cost_usd": 0.0000847
+    },
+    {
+      "config": "haiku-low",
+      "issue": 2,
+      "rep": 2,
+      "valid": true,
+      "output_tokens": 856,
+      "cost_usd": 0.0004882
+    },
+    {
+      "config": "haiku-low",
+      "issue": 2,
+      "rep": 3,
+      "valid": false,
+      "output_tokens": 693,
+      "cost_usd": 0.00040669999999999997
+    },
+    {
+      "config": "haiku-low",
+      "issue": 3,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 989,
+      "cost_usd": 0.0005557
+    },
+    {
+      "config": "haiku-low",
+      "issue": 3,
+      "rep": 2,
+      "valid": true,
+      "output_tokens": 1140,
+      "cost_usd": 0.0006312000000000001
+    },
+    {
+      "config": "haiku-low",
+      "issue": 3,
+      "rep": 3,
+      "valid": false,
+      "output_tokens": 47,
+      "cost_usd": 0.0000847
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 1,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 985,
+      "cost_usd": 0.000554
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 1,
+      "rep": 2,
+      "valid": true,
+      "output_tokens": 1185,
+      "cost_usd": 0.000654
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 1,
+      "rep": 3,
+      "valid": true,
+      "output_tokens": 1054,
+      "cost_usd": 0.0005885
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 2,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 1082,
+      "cost_usd": 0.0006012000000000001
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 2,
+      "rep": 2,
+      "valid": true,
+      "output_tokens": 1156,
+      "cost_usd": 0.0006382
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 2,
+      "rep": 3,
+      "valid": true,
+      "output_tokens": 945,
+      "cost_usd": 0.0005327
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 3,
+      "rep": 1,
+      "valid": false,
+      "output_tokens": 49,
+      "cost_usd": 0.00008570000000000001
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 3,
+      "rep": 2,
+      "valid": false,
+      "output_tokens": 48,
+      "cost_usd": 0.0000852
+    },
+    {
+      "config": "haiku-medium",
+      "issue": 3,
+      "rep": 3,
+      "valid": false,
+      "output_tokens": 47,
+      "cost_usd": 0.0000847
+    },
+    {
+      "config": "sonnet-low",
+      "issue": 1,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 1136,
+      "cost_usd": 0.01259
+    },
+    {
+      "config": "sonnet-low",
+      "issue": 2,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 1148,
+      "cost_usd": 0.012684
+    },
+    {
+      "config": "sonnet-low",
+      "issue": 3,
+      "rep": 1,
+      "valid": true,
+      "output_tokens": 1274,
+      "cost_usd": 0.013964
+    }
+  ]
+}
