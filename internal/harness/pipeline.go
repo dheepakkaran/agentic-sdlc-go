@@ -31,6 +31,7 @@ type Result struct {
 	Passed       bool         `json:"gates_passed"`
 	Approved     bool         `json:"qa_approved"`
 	Stopped      string       `json:"stopped,omitempty"`
+	Escalations  []string     `json:"escalations,omitempty"`
 	CostUSD      float64      `json:"cost_usd"`
 	Calls        []Call       `json:"calls"`
 }
@@ -61,6 +62,20 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 	if err := p.LLM.Ask(ctx, Analyst, "", "", prompts.Analyst, []Msg{{Text: issueText}}, requirementsSchema, 1, &r.Requirements); err != nil {
 		return r, err
 	}
+	if !r.Requirements.Valid() {
+		// Cascade: the cheap model's answer failed the check → one retry on
+		// the next model up. Cheap by default, escalate only on evidence.
+		up := Routes[Analyst].Escalate
+		p.Log("analyst   output failed the check → escalate to %s", up)
+		r.Escalations = append(r.Escalations, "analyst→"+up)
+		if err := p.LLM.Ask(ctx, Analyst, up, "", prompts.Analyst, []Msg{{Text: issueText}}, requirementsSchema, 2, &r.Requirements); err != nil {
+			return r, err
+		}
+		if !r.Requirements.Valid() {
+			r.Stopped = "requirements still incomplete: needs a human"
+			return r, nil
+		}
+	}
 	reqText := "Requirements:\n" + js(r.Requirements)
 
 	// 2. Architect (strong model, decision): scope + file plan from the map.
@@ -77,10 +92,14 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 	// 3. Developer ⇄ gates loop. Only planned files are sent in full.
 	files := ReadFiles(p.Dir, uniq(append(append([]string{}, r.Plan.FilesToRead...), r.Plan.FilesToWrite...)))
 	turns := []Msg{{Text: reqText + "\n\nPlan:\n" + js(r.Plan) + "\n\nFiles:\n" + files}}
+	lastGatesFailed := false
 	for attempt := 1; attempt <= p.MaxAttempts; attempt++ {
 		model := Routes[Developer].Model
-		if attempt == p.MaxAttempts && attempt > 1 {
-			model = Routes[Developer].Escalate // last try on the strong model
+		if attempt == p.MaxAttempts && lastGatesFailed {
+			// Escalate only on evidence: the mid model failed the gates.
+			// A QA revision stays on the same model (and keeps its cache).
+			model = Routes[Developer].Escalate
+			r.Escalations = append(r.Escalations, "developer→"+model)
 		}
 		r.DevModels = append(r.DevModels, model)
 		p.Log("developer %s  → attempt %d", model, attempt)
@@ -96,6 +115,7 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 		}
 		r.Attempts = append(r.Attempts, gs)
 		p.Log("gates     %s", gateLine(gs))
+		lastGatesFailed = !allOK(gs)
 		if allOK(gs) {
 			r.Passed = true
 			// 4. QA (strong model, decision) sees only the diff.
@@ -106,13 +126,17 @@ func (p *Pipeline) Run(ctx context.Context, is Issue) (*Result, error) {
 				return r, err
 			}
 			r.Review = append(r.Review, rv)
-			if rv.Verdict == "approve" || len(r.Review) >= 2 || attempt == p.MaxAttempts {
-				r.Approved = rv.Verdict == "approve"
+			r.Approved = rv.Verdict == "approve"
+			code := codeFindings(rv.Findings, allowed)
+			if r.Approved || len(r.Review) >= 2 || attempt == p.MaxAttempts || len(code) == 0 {
+				if !r.Approved && len(code) == 0 {
+					r.Stopped = "QA findings are outside the planned code: needs a human"
+				}
 				break
 			}
-			// One QA revision round: findings go back to the developer.
+			// One QA revision round: only findings on planned code files go back.
 			r.Passed = false
-			turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: "QA requested changes:\n" + js(rv.Findings)})
+			turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: "QA requested changes (edits apply to the files as they are now):\n" + js(code)})
 			continue
 		}
 		turns = append(turns, Msg{Assistant: true, Text: js(ch)}, Msg{Text: "Your change failed the gates. Fix it.\n" + failures(gs)})
@@ -158,6 +182,21 @@ func RunNaive(ctx context.Context, l *LLM, dir string, srcDirs []string, is Issu
 	r.Attempts = [][]Gate{gs}
 	r.Passed = allOK(gs)
 	return r, nil
+}
+
+// codeFindings keeps the QA findings the developer can act on: those on a
+// planned file. Others (requirements, process) go to a human.
+func codeFindings(fs []Finding, allowed []string) []Finding {
+	var out []Finding
+	for _, f := range fs {
+		for _, a := range allowed {
+			if f.File == a {
+				out = append(out, f)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // applyChange applies edits and new files after the guardrails. Problems

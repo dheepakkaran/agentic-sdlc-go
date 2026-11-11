@@ -1,6 +1,7 @@
 // Command sdlc runs a GitHub issue through the AI-SDLC role agents.
 //
 //	sdlc run   -issue 3 [-pr]   analyst → architect → developer ⇄ gates → QA → docs → PR
+//	sdlc publish -issue 3       open the PR for an approved run without re-running it
 //	sdlc naive -issue 3         baseline: one strong-model call with the whole repo
 //	sdlc map                    print the repo map the agents see
 package main
@@ -42,7 +43,7 @@ func main() {
 		must(err)
 		fmt.Print(m)
 		return
-	case "run", "naive":
+	case "run", "naive", "publish":
 	default:
 		fmt.Fprintln(os.Stderr, "unknown command", os.Args[1])
 		os.Exit(2)
@@ -65,6 +66,14 @@ func main() {
 	}
 
 	branch := fmt.Sprintf("ai/issue-%d", is.Number)
+	if os.Args[1] == "publish" {
+		var r harness.Result
+		b, err := os.ReadFile(filepath.Clean(fmt.Sprintf("results/runs/issue-%d.json", is.Number)))
+		must(err)
+		must(json.Unmarshal(b, &r))
+		publish(&r, is, branch, filepath.Join(".work", fmt.Sprintf("issue-%d", is.Number)), r.Calls[0].Run)
+		return
+	}
 	dir := worktree(fmt.Sprintf(".work/issue-%d", is.Number), branch)
 	fmt.Printf("issue #%d · %s\n", is.Number, is.Title)
 	p := &harness.Pipeline{LLM: llm, Dir: dir, MapDirs: mapDirs, MaxAttempts: *attempts, Log: logf}
@@ -72,7 +81,15 @@ func main() {
 	save(fmt.Sprintf("results/runs/issue-%d.json", is.Number), r)
 	must(err)
 	fmt.Printf("  result: gates=%v qa=%v cost=$%.4f %s\n", r.Passed, r.Approved, r.CostUSD, r.Stopped)
-	if !*pr || !r.Passed || !r.Approved {
+	if *pr {
+		publish(r, is, branch, dir, runID)
+	}
+}
+
+// publish commits an approved run on its branch, pushes it and opens the PR.
+func publish(r *harness.Result, is harness.Issue, branch, dir, runID string) {
+	if !r.Passed || !r.Approved {
+		fmt.Println("  not published: gates or QA did not pass")
 		return
 	}
 	if r.Docs.Changelog != "" {

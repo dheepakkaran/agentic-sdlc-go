@@ -101,3 +101,23 @@ func TestApplyChange(t *testing.T) {
 		t.Errorf("edit not applied: %s", got)
 	}
 }
+
+func TestRequirementsValid(t *testing.T) {
+	good := Requirements{Summary: "Add an endpoint that sets device status", Requirements: []string{"r"}, AcceptanceCriteria: []string{"a", "b"}}
+	if !good.Valid() {
+		t.Error("good requirements rejected")
+	}
+	// The exact output Haiku returned once at low effort (results/runs/issue-1 v2).
+	lazy := Requirements{Summary: "placeholder"}
+	if lazy.Valid() {
+		t.Error("placeholder requirements must fail the check")
+	}
+}
+
+func TestCodeFindings(t *testing.T) {
+	fs := []Finding{{File: "internal/inventory/http.go", Severity: "low"}, {File: "requirements", Severity: "high"}}
+	got := codeFindings(fs, []string{"internal/inventory/http.go"})
+	if len(got) != 1 || got[0].File != "internal/inventory/http.go" {
+		t.Errorf("codeFindings: %+v", got)
+	}
+}

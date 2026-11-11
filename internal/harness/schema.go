@@ -1,5 +1,7 @@
 package harness
 
+import "strings"
+
 // JSON Schemas for structured output. Every role answers in a fixed shape,
 // so no tokens go to prose and the harness never parses free text.
 
@@ -24,6 +26,13 @@ type Requirements struct {
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
 	Assumptions        []string `json:"assumptions"`
 	OutOfScope         []string `json:"out_of_scope"`
+}
+
+// Valid is the deterministic check on the cheap analyst's output. A model
+// can return a schema-valid but empty answer; this catches it.
+func (r Requirements) Valid() bool {
+	s := strings.ToLower(strings.TrimSpace(r.Summary))
+	return len(s) >= 20 && !strings.Contains(s, "placeholder") && len(r.Requirements) >= 1 && len(r.AcceptanceCriteria) >= 2
 }
 
 var requirementsSchema = obj(map[string]any{"summary": str, "requirements": strList, "acceptance_criteria": strList, "assumptions": strList, "out_of_scope": strList})
