@@ -3,6 +3,7 @@ package inventory
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -313,5 +314,110 @@ func TestHTTPSetStatus(t *testing.T) {
 				t.Fatalf("status changed: %q", d.Status)
 			}
 		})
+	}
+}
+
+var mgmtIPCases = []struct {
+	name, ip string
+	valid    bool
+}{
+	{"empty", "", true},
+	{"ipv4", "10.0.0.1", true},
+	{"ipv6", "2001:db8::1", true},
+	{"octet too big", "10.0.0.300", false},
+	{"not an ip", "not-an-ip", false},
+	{"cidr", "10.0.0.1/24", false},
+	{"leading space", " 10.0.0.1", false},
+	{"port", "10.0.0.1:22", false},
+	{"bad ipv6", "2001:db8::zz", false},
+	{"zone", "fe80::1%eth0", false},
+}
+
+func TestStoreCreateMgmtIP(t *testing.T) {
+	for _, tc := range mgmtIPCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore()
+			_, err := s.Create(Device{ID: "d1", Hostname: "h", MgmtIP: tc.ip})
+			if tc.valid {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if d, _ := s.Get("d1"); d.MgmtIP != tc.ip {
+					t.Fatalf("stored %q", d.MgmtIP)
+				}
+				return
+			}
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatalf("got %v want ErrInvalid", err)
+			}
+			if _, err := s.Get("d1"); err != ErrNotFound {
+				t.Fatalf("persisted: %v", err)
+			}
+		})
+	}
+}
+
+func TestHTTPCreateMgmtIP(t *testing.T) {
+	cases := append(mgmtIPCases, struct {
+		name, ip string
+		valid    bool
+	}{"omitted", "\x00omit", true})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(Handler(NewStore()))
+			defer srv.Close()
+			m := map[string]string{"id": "d1", "hostname": "h"}
+			want := tc.ip
+			if tc.ip == "\x00omit" {
+				want = ""
+			} else {
+				m["mgmt_ip"] = tc.ip
+			}
+			b, _ := json.Marshal(m)
+			res, err := http.Post(srv.URL+"/devices", "application/json", bytes.NewReader(b))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = res.Body.Close() }()
+			if tc.valid {
+				if res.StatusCode != http.StatusCreated {
+					t.Fatalf("status %d", res.StatusCode)
+				}
+				g, _ := http.Get(srv.URL + "/devices/d1")
+				var d Device
+				if err := json.NewDecoder(g.Body).Decode(&d); err != nil || d.MgmtIP != want {
+					t.Fatalf("stored %q %v", d.MgmtIP, err)
+				}
+				return
+			}
+			if res.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status %d", res.StatusCode)
+			}
+			var e map[string]string
+			if err := json.NewDecoder(res.Body).Decode(&e); err != nil || !strings.Contains(e["error"], "mgmt_ip") {
+				t.Fatalf("body %v %v", e, err)
+			}
+			g, _ := http.Get(srv.URL + "/devices/d1")
+			if g.StatusCode != http.StatusNotFound {
+				t.Fatalf("persisted: %d", g.StatusCode)
+			}
+		})
+	}
+}
+
+func TestHTTPSetStatusKeepsMgmtIP(t *testing.T) {
+	s := NewStore()
+	if _, err := s.Create(Device{ID: "r1", Hostname: "h", MgmtIP: "10.0.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(s))
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/devices/r1/status", strings.NewReader(`{"status":"down","mgmt_ip":"10.0.0.300"}`))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("put: %v %v", err, res)
+	}
+	if d, _ := s.Get("r1"); d.MgmtIP != "10.0.0.1" || d.Status != "up" {
+		t.Fatalf("changed: %+v", d)
 	}
 }
