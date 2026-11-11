@@ -35,6 +35,7 @@ func main() {
 	pr := fs.Bool("pr", false, "commit, push and open a pull request when QA approves")
 	budget := fs.Float64("budget", 0.60, "USD cap for this run")
 	attempts := fs.Int("attempts", 3, "developer attempts (last one escalated to the strong model)")
+	route := fs.String("route", "routed", "routed (default) or opus: every role on the strong model, for the routing ablation")
 	must(fs.Parse(os.Args[2:]))
 
 	switch os.Args[1] {
@@ -48,10 +49,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "unknown command", os.Args[1])
 		os.Exit(2)
 	}
+	version := harness.Version
+	if *route == "opus" {
+		for role, rt := range harness.Routes {
+			rt.Model, rt.Escalate = harness.Opus, ""
+			harness.Routes[role] = rt
+		}
+		version += "-all-opus"
+	}
 	is := fetchIssue(*num)
 	ctx := context.Background()
 	runID := fmt.Sprintf("%s-%d-%s", os.Args[1], is.Number, time.Now().UTC().Format("20060102T150405"))
-	llm := &harness.LLM{Client: anthropic.NewClient(), Run: runID, Version: harness.Version, Issue: is.Number, BudgetUSD: *budget, Ledger: "results/ledger.jsonl"}
+	if *route == "opus" {
+		runID = "opus" + runID
+	}
+	llm := &harness.LLM{Client: anthropic.NewClient(), Run: runID, Version: version, Issue: is.Number, BudgetUSD: *budget, Ledger: "results/ledger.jsonl"}
 	logf := func(f string, a ...any) { fmt.Printf("  "+f+"\n", a...) }
 
 	if os.Args[1] == "naive" {
@@ -74,11 +86,20 @@ func main() {
 		publish(&r, is, branch, filepath.Join(".work", fmt.Sprintf("issue-%d", is.Number)), r.Calls[0].Run)
 		return
 	}
-	dir := worktree(fmt.Sprintf(".work/issue-%d", is.Number), branch)
+	wt := fmt.Sprintf(".work/issue-%d", is.Number)
+	if *route == "opus" {
+		branch, wt = fmt.Sprintf("ai/opus-issue-%d", is.Number), fmt.Sprintf(".work/opus-issue-%d", is.Number)
+	}
+	dir := worktree(wt, branch)
 	fmt.Printf("issue #%d · %s\n", is.Number, is.Title)
 	p := &harness.Pipeline{LLM: llm, Dir: dir, MapDirs: mapDirs, MaxAttempts: *attempts, Log: logf}
 	r, err := p.Run(ctx, is)
-	save(fmt.Sprintf("results/runs/issue-%d.json", is.Number), r)
+	name := fmt.Sprintf("results/runs/issue-%d.json", is.Number)
+	if *route == "opus" {
+		name = fmt.Sprintf("results/runs/issue-%d.all-opus.json", is.Number)
+		*pr = false
+	}
+	save(name, r)
 	must(err)
 	fmt.Printf("  result: gates=%v qa=%v cost=$%.4f %s\n", r.Passed, r.Approved, r.CostUSD, r.Stopped)
 	if *pr {
