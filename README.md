@@ -1,5 +1,9 @@
 # agentic-sdlc-go
 
+<a href="https://dheepakkaran.github.io/agentic-sdlc-go/#overview"><img src="docs/media/overview.webp" alt="35-second overview: a small GitHub issue goes through AI helpers that plan, write the fix and tests, pass every check, and a person merges it" width="100%"></a>
+
+<sub>35-second overview (silent preview). <a href="https://dheepakkaran.github.io/agentic-sdlc-go/#overview">Watch it with sound on the project page →</a></sub>
+
 An AI-assisted software development pipeline for a small Go service. A GitHub issue goes through role agents (analyst → architect → developer ⇄ tests → QA → docs) and comes out as a pull request that must pass the same gates as human code: tests with the race detector, lint, security scanning, a container scan, a deploy to Kubernetes, and a release readiness check.
 
 The service is a network device inventory REST API (routers, switches, OLTs). It is deliberately small so every agent change is easy to review.
